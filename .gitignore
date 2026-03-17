@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+uploads/*
+!uploads/.gitkeep
+app.db
+data/imports/**
+!data/imports/.gitkeep
+!data/imports/README.md

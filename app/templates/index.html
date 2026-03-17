@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NutriSight</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    {% set app_settings = settings | default({}, true) %}
+    {% set app_macro_goals = app_settings.macro_goals | default({}, true) %}
+    {% set app_meals = recent_meals | default([], true) %}
+    {% set app_foods = available_foods | default([], true) %}
+    {% set app_today = today | default('', true) %}
+    {% set app_custom_foods = custom_foods | default([], true) %}
+    <script id="nutrisight-state" type="application/json">
+      {{ {
+        "settings": app_settings,
+        "recentMeals": app_meals,
+        "availableFoods": app_foods,
+        "customFoods": app_custom_foods,
+        "today": app_today,
+        "mealDetail": meal_detail,
+        "providerStatus": provider_status
+      } | tojson }}
+    </script>
+
+    <nav class="quick-nav" aria-label="Page sections">
+      <a href="#compose">Analyze</a>
+      <a href="#custom-foods">Custom</a>
+      <a href="#history">History</a>
+      <a href="#settings">Settings</a>
+      <a href="/admin/db">DB Portal</a>
+      <a href="/admin/users">Users</a>
+    </nav>
+
+    {% if message %}
+    <section class="panel status-panel">
+      <p class="status status-strong">{{ message }}</p>
+    </section>
+    {% endif %}
+
+    <section class="admin-grid">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Account</p>
+            <h2>Current device session</h2>
+          </div>
+        </div>
+        <article class="admin-card">
+          <strong>{{ current_user.name }}</strong>
+          <p class="admin-meta">{{ current_user.email }}</p>
+          {% if current_user.is_system %}
+          <p class="field-help">You are using the default local account. Register with your email so meals and custom foods stay tied to you on this device.</p>
+          {% else %}
+          <p class="field-help">This device stays signed in unless you log out.</p>
+          {% endif %}
+        </article>
+        <form method="post" action="/auth/session" class="stack">
+          <label class="field">
+            <span>Name</span>
+            <input type="text" name="name" value="{{ current_user.name if not current_user.is_system else '' }}" placeholder="Apoorva" required />
+          </label>
+          <label class="field">
+            <span>Email</span>
+            <input type="email" name="email" value="{{ current_user.email if not current_user.is_system else '' }}" placeholder="name@example.com" required />
+          </label>
+          <button type="submit" class="button">Register / Sign in</button>
+        </form>
+        {% if not current_user.is_system %}
+        <form method="post" action="/auth/logout">
+          <button type="submit" class="secondary">Sign out</button>
+        </form>
+        {% endif %}
+      </section>
+
+      <section id="custom-foods" class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Quick Log</p>
+            <h2>Custom foods</h2>
+          </div>
+        </div>
+        <form method="post" action="/custom-foods" class="stack">
+          <div class="settings-form-grid settings-form-grid-wide">
+            <label class="field">
+              <span>Food name</span>
+              <input type="text" name="food_name" placeholder="Protein shake" required />
+            </label>
+            <label class="field">
+              <span>Serving grams</span>
+              <input type="number" name="serving_grams" min="1" step="0.1" placeholder="100" required />
+            </label>
+          </div>
+          <div class="settings-form-grid">
+            <label class="field">
+              <span>Calories</span>
+              <input type="number" name="calories" min="0" step="0.1" required />
+            </label>
+            <label class="field">
+              <span>Protein g</span>
+              <input type="number" name="protein_g" min="0" step="0.1" required />
+            </label>
+            <label class="field">
+              <span>Carbs g</span>
+              <input type="number" name="carbs_g" min="0" step="0.1" required />
+            </label>
+            <label class="field">
+              <span>Fat g</span>
+              <input type="number" name="fat_g" min="0" step="0.1" required />
+            </label>
+          </div>
+          <button type="submit" class="secondary">Save custom food</button>
+        </form>
+        <div class="meal-list">
+          {% for food in app_custom_foods %}
+          <article class="admin-card">
+            <div class="admin-card-header">
+              <div>
+                <strong>{{ food.food_name }}</strong>
+                <p class="admin-meta">{{ food.calories }} kcal / {{ food.serving_grams }} g</p>
+              </div>
+            </div>
+            <div class="detail-stats admin-stats">
+              <div><span>Protein</span><strong>{{ food.protein_g }}</strong></div>
+              <div><span>Carbs</span><strong>{{ food.carbs_g }}</strong></div>
+              <div><span>Fat</span><strong>{{ food.fat_g }}</strong></div>
+            </div>
+            <form method="post" action="/custom-foods/{{ food.id }}/log" class="stack">
+              <div class="settings-form-grid settings-form-grid-wide">
+                <label class="field">
+                  <span>Meal name</span>
+                  <input type="text" name="meal_name" value="{{ food.food_name }}" required />
+                </label>
+                <label class="field">
+                  <span>Servings</span>
+                  <input type="number" name="servings" min="0.25" step="0.25" value="1" required />
+                </label>
+              </div>
+              <div class="admin-actions">
+                <button type="submit" class="button">Log as meal</button>
+              </div>
+            </form>
+            <form method="post" action="/custom-foods/{{ food.id }}/delete">
+              <button type="submit" class="secondary danger">Delete</button>
+            </form>
+          </article>
+          {% else %}
+          <div class="empty-state">No custom foods yet. Add meals, shakes, supplements, or packaged foods you use often.</div>
+          {% endfor %}
+        </div>
+      </section>
+    </section>
+
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Local-first meal tracking</p>
+        <h1>NutriSight</h1>
+        <p class="lede">Upload a meal photo, review the AI estimate, and log calories and macros without leaving your network.</p>
+      </div>
+      <div class="dashboard-card">
+        <p class="card-label">Today</p>
+        <p class="metric"><span id="dashboard-calories">{{ dashboard.calories }}</span> / {{ dashboard.calorie_goal }} kcal</p>
+        <p class="submetric"><span id="dashboard-remaining">{{ dashboard.remaining_calories }}</span> kcal remaining</p>
+        <div class="macro-grid">
+          <div><span id="dashboard-protein">{{ dashboard.protein_g }}</span><small>protein</small></div>
+          <div><span id="dashboard-carbs">{{ dashboard.carbs_g }}</span><small>carbs</small></div>
+          <div><span id="dashboard-fat">{{ dashboard.fat_g }}</span><small>fat</small></div>
+        </div>
+        <div class="settings-mini">
+          <div>
+            <span>Provider</span>
+            <strong>{{ app_settings.model_provider | default('stub', true) }}</strong>
+          </div>
+          <div>
+            <span>Portions</span>
+            <strong>{{ app_settings.portion_estimation_style | default('grams_with_range', true) }}</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="compose" class="panel hero-panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Step 1</p>
+          <h2>Analyze a meal</h2>
+        </div>
+      </div>
+      <form id="analyze-form" class="stack">
+        <label class="field">
+          <span>Meal name</span>
+          <input id="meal-name" name="meal_name" type="text" placeholder="Lunch bowl" required />
+        </label>
+        <label class="field upload">
+          <span>Photo or camera</span>
+          <input id="image-input" name="image" type="file" accept="image/*" capture="environment" required />
+          <p class="field-help">Use your phone camera or pick a photo from the gallery. Images are compressed on-device before upload.</p>
+        </label>
+        <button type="submit" class="button">Analyze Photo</button>
+      </form>
+      <p id="status" class="status" aria-live="polite">Waiting for image upload.</p>
+      <div id="analysis-meta" class="analysis-meta hidden"></div>
+    </section>
+
+    <section class="results-grid">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Step 2</p>
+          <h2>Confirm items</h2>
+        </div>
+          <img id="preview-image" class="preview hidden" alt="Meal preview" />
+        </div>
+        <div id="results-summary" class="results-summary">
+          <span id="results-count">0 items</span>
+          <span id="results-validity">Add or map items to save</span>
+        </div>
+        <div id="results-empty" class="empty-state">No analysis yet.</div>
+        <form id="results-form" class="stack hidden">
+          <div id="results-list" class="stack"></div>
+          <div class="save-bar">
+            <button id="add-item" type="button" class="secondary">Add food row</button>
+            <button id="save-meal-button" type="submit" class="button">Save meal</button>
+          </div>
+          <p id="save-message" class="status save-message" aria-live="polite">Map items and set portions before saving.</p>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Step 3</p>
+            <h2>Meal totals</h2>
+          </div>
+        </div>
+        <div class="totals">
+          <div><span id="total-calories">0</span><small>kcal</small></div>
+          <div><span id="total-protein">0</span><small>protein</small></div>
+          <div><span id="total-carbs">0</span><small>carbs</small></div>
+          <div><span id="total-fat">0</span><small>fat</small></div>
+        </div>
+      </section>
+    </section>
+
+    <section id="history" class="history-grid">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Recent</p>
+            <h2>Meal history & trends</h2>
+          </div>
+          <p id="history-count" class="history-count">{{ app_meals | length }} meals</p>
+        </div>
+        <div id="meal-history" class="meal-nav">
+          {% for meal in app_meals %}
+          <button
+            type="button"
+            class="meal-nav-item {% if loop.first %}is-active{% endif %}"
+            data-meal-index="{{ loop.index0 }}"
+            aria-pressed="{% if loop.first %}true{% else %}false{% endif %}"
+          >
+            <span class="meal-nav-title">{{ meal.meal_name }}</span>
+            <span class="meal-nav-meta">{{ meal.created_at }}</span>
+            <span class="meal-nav-total">{{ meal.total_calories }} kcal</span>
+          </button>
+          {% else %}
+          <div class="empty-state">No meals logged yet.</div>
+          {% endfor %}
+        </div>
+        <div id="trend-summary" class="trend-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Detail</p>
+            <h2>Selected meal</h2>
+          </div>
+          <p id="selected-meal-label" class="history-count">No meal selected</p>
+        </div>
+        <div id="meal-detail" class="meal-detail">
+          <div class="empty-state">Pick a meal to inspect totals and items.</div>
+        </div>
+      </section>
+    </section>
+
+    <section id="settings" class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Settings</p>
+          <h2>Workspace configuration</h2>
+        </div>
+      </div>
+      <form id="settings-form" class="stack settings-form">
+        <input name="current_user_name" type="hidden" value="{{ user_name | default('default', true) }}" />
+        <div class="settings-form-grid">
+          <label class="field">
+            <span>Calorie goal</span>
+            <input name="calorie_goal" type="number" min="1" value="{{ app_settings.calorie_goal | default(dashboard.calorie_goal, true) }}" required />
+          </label>
+          <label class="field">
+            <span>Protein goal</span>
+            <input name="protein_g" type="number" min="1" value="{{ app_macro_goals.protein_g | default(160, true) }}" required />
+          </label>
+          <label class="field">
+            <span>Carb goal</span>
+            <input name="carbs_g" type="number" min="1" value="{{ app_macro_goals.carbs_g | default(220, true) }}" required />
+          </label>
+          <label class="field">
+            <span>Fat goal</span>
+            <input name="fat_g" type="number" min="1" value="{{ app_macro_goals.fat_g | default(70, true) }}" required />
+          </label>
+        </div>
+        <div class="settings-form-grid settings-form-grid-wide">
+          <label class="field">
+            <span>Model provider</span>
+            <select name="model_provider">
+              <option value="stub" {% if app_settings.model_provider | default('stub', true) == "stub" %}selected{% endif %}>Stub</option>
+              <option value="ollama" {% if app_settings.model_provider == "ollama" %}selected{% endif %}>Ollama</option>
+              <option value="lmstudio" {% if app_settings.model_provider == "lmstudio" %}selected{% endif %}>LM Studio</option>
+              <option value="api" {% if app_settings.model_provider == "api" %}selected{% endif %}>API fallback</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Portion style</span>
+            <select name="portion_estimation_style">
+              <option value="grams_with_range" {% if app_settings.portion_estimation_style | default('grams_with_range', true) == "grams_with_range" %}selected{% endif %}>Grams with range</option>
+              <option value="size_labels" {% if app_settings.portion_estimation_style == "size_labels" %}selected{% endif %}>Size labels</option>
+            </select>
+          </label>
+        </div>
+        <div class="settings-form-grid settings-form-grid-wide">
+          <label class="field">
+            <span>LM Studio base URL</span>
+            <input name="lmstudio_base_url" type="text" value="{{ app_settings.lmstudio_base_url | default('http://192.168.0.143:1234', true) }}" />
+          </label>
+          <label class="field">
+            <span>LM Studio vision model</span>
+            <input name="lmstudio_vision_model" type="text" value="{{ app_settings.lmstudio_vision_model | default('qwen/qwen3-vl-8b', true) }}" placeholder="qwen/qwen3-vl-8b" />
+          </label>
+        </div>
+        <div class="settings-form-grid settings-form-grid-wide">
+          <label class="field">
+            <span>LM Studio portion model</span>
+            <input name="lmstudio_portion_model" type="text" value="{{ app_settings.lmstudio_portion_model | default('qwen/qwen3-vl-8b', true) }}" placeholder="leave blank to reuse vision model" />
+          </label>
+        </div>
+        <button type="submit" class="secondary">Save Settings</button>
+      </form>
+      <div id="settings-summary" class="settings-grid">
+        <article class="setting-card">
+          <span>Calorie goal</span>
+          <strong>{{ app_settings.calorie_goal | default(dashboard.calorie_goal, true) }}</strong>
+        </article>
+        <article class="setting-card">
+          <span>Model provider</span>
+          <strong>{{ app_settings.model_provider | default('stub', true) }}</strong>
+        </article>
+        <article class="setting-card">
+          <span>Portion style</span>
+          <strong>{{ app_settings.portion_estimation_style | default('grams_with_range', true) }}</strong>
+        </article>
+        <article class="setting-card">
+          <span>Macro goals</span>
+          <strong>P {{ app_macro_goals.protein_g | default(160, true) }} / C {{ app_macro_goals.carbs_g | default(220, true) }} / F {{ app_macro_goals.fat_g | default(70, true) }}</strong>
+        </article>
+        <article class="setting-card">
+          <span>LM Studio URL</span>
+          <strong>{{ app_settings.lmstudio_base_url | default('http://192.168.0.143:1234', true) }}</strong>
+        </article>
+        <article class="setting-card">
+          <span>Vision model</span>
+          <strong>{{ app_settings.lmstudio_vision_model | default('not set', true) }}</strong>
+        </article>
+        <article class="setting-card">
+          <span>Portion model</span>
+          <strong>{{ app_settings.lmstudio_portion_model | default('reuse vision model', true) }}</strong>
+        </article>
+      </div>
+      <div class="provider-status-grid">
+        <article class="setting-card">
+          <span>Selected provider</span>
+          <strong id="provider-selected">{{ provider_status.selected | default('stub', true) }}</strong>
+          <p>Current runtime selection</p>
+        </article>
+        <article class="setting-card">
+          <span>Ollama</span>
+          <strong>{{ provider_status.ollama.status | default('unknown', true) }}</strong>
+          <p>{{ provider_status.ollama.detail | default('not checked', true) }}</p>
+        </article>
+        <article class="setting-card">
+          <span>LM Studio</span>
+          <strong>{{ provider_status.lmstudio.status | default('unknown', true) }}</strong>
+          <p>{{ provider_status.lmstudio.detail | default('not checked', true) }}</p>
+        </article>
+      </div>
+      <p><a href="/history">Open full history page</a> · <a href="/admin/db">Open DB portal</a> · <a href="/admin/users">Open admin users page</a></p>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

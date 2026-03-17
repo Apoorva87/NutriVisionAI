@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NutriSight History</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <nav class="quick-nav" aria-label="History navigation">
+      <a href="/">Logger</a>
+      <a href="/history">History</a>
+      <a href="/admin/db">DB Portal</a>
+      <a href="/admin/users">Users</a>
+    </nav>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">History</p>
+        <h1>Meal Trends</h1>
+        <p class="lede">Daily calories and macros for <strong>{{ user_name }}</strong> ({{ current_user.email }}).</p>
+        <p><a href="/">Back to Logger</a> · <a href="/admin/db">Open DB portal</a> · <a href="/admin/users">Open admin users page</a></p>
+      </div>
+      <div class="dashboard-card">
+        <p class="card-label">Most Frequent Foods</p>
+        <div class="meal-list">
+          {% for item in top_foods %}
+          <article class="meal-row">
+            <div>
+              <strong>{{ item.canonical_name }}</strong>
+              <p>{{ item.item_count }} entries</p>
+            </div>
+            <div class="meal-macros">
+              <span>{{ item.total_calories }} kcal</span>
+            </div>
+          </article>
+          {% else %}
+          <div class="empty-state">No food trends yet.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Daily</p>
+          <h2>Calorie Trend</h2>
+        </div>
+      </div>
+      <div class="trend-grid">
+        {% for day in trends %}
+        <article class="setting-card">
+          <span>{{ day.day }}</span>
+          <strong>{{ day.calories }} kcal</strong>
+          <p>P {{ day.protein_g }} / C {{ day.carbs_g }} / F {{ day.fat_g }} · {{ day.meal_count }} meals</p>
+        </article>
+        {% else %}
+        <div class="empty-state">No logged days yet.</div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Meals</p>
+          <h2>Meals by Day</h2>
+        </div>
+      </div>
+      <div class="stack">
+        {% for group in grouped_meals %}
+        <section>
+          <h3>{{ group.day }}</h3>
+          <div class="meal-list">
+            {% for meal in group.meals %}
+            <article class="meal-row">
+              <div>
+                <strong>{{ meal.meal_name }}</strong>
+                <p>{{ meal.created_at }}</p>
+              </div>
+              <div class="meal-macros">
+                <span>{{ meal.total_calories }} kcal</span>
+                <span>P {{ meal.total_protein_g }} / C {{ meal.total_carbs_g }} / F {{ meal.total_fat_g }}</span>
+              </div>
+            </article>
+            {% endfor %}
+          </div>
+        </section>
+        {% else %}
+        <div class="empty-state">No meals saved yet.</div>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NutriSight Admin</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <nav class="quick-nav" aria-label="Admin navigation">
+      <a href="/">Logger</a>
+      <a href="/history">History</a>
+      <a href="/admin/db">DB Portal</a>
+      <a href="/admin/users">Users</a>
+    </nav>
+
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Admin</p>
+        <h1>Database Portal</h1>
+        <p class="lede">Search and maintain the nutrition master catalog on the server. Meals below are shown for <strong>{{ user_name }}</strong> ({{ current_user.email }}).</p>
+      </div>
+      <div class="dashboard-card">
+        <p class="card-label">Database Overview</p>
+        <div class="macro-grid">
+          <div><span>{{ db_overview.nutrition_item_count }}</span><small>foods</small></div>
+          <div><span>{{ db_overview.nutrition_source_count }}</span><small>sources</small></div>
+          <div><span>{{ db_overview.nutrition_alias_count }}</span><small>aliases</small></div>
+        </div>
+        <div class="settings-mini">
+          <div>
+            <span>User meals</span>
+            <strong>{{ db_overview.meal_count }}</strong>
+          </div>
+          <div>
+            <span>Meal items</span>
+            <strong>{{ db_overview.meal_item_count }}</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {% if message %}
+    <section class="panel status-panel">
+      <p class="status status-strong">{{ message }}</p>
+    </section>
+    {% endif %}
+
+    <section class="admin-grid">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Master Controls</p>
+            <h2>{% if edit_item %}Edit nutrition item{% else %}Add nutrition item{% endif %}</h2>
+          </div>
+        </div>
+        <form class="stack" method="post" action="/admin/nutrition-items">
+          <input type="hidden" name="item_id" value="{{ edit_item.id if edit_item else 0 }}" />
+          <input type="hidden" name="q" value="{{ query }}" />
+          <div class="settings-form-grid settings-form-grid-wide">
+            <label class="field">
+              <span>Canonical name</span>
+              <input name="canonical_name" type="text" value="{{ edit_item.canonical_name if edit_item else '' }}" required />
+            </label>
+            <label class="field">
+              <span>Source key</span>
+              <input name="primary_source_key" type="text" value="{{ edit_item.primary_source_key if edit_item else '' }}" placeholder="usda_fdc_foundation" />
+            </label>
+          </div>
+          <div class="settings-form-grid">
+            <label class="field">
+              <span>Serving grams</span>
+              <input name="serving_grams" type="number" min="1" step="0.1" value="{{ edit_item.serving_grams if edit_item else '' }}" required />
+            </label>
+            <label class="field">
+              <span>Calories</span>
+              <input name="calories" type="number" min="0" step="0.1" value="{{ edit_item.calories if edit_item else '' }}" required />
+            </label>
+            <label class="field">
+              <span>Protein g</span>
+              <input name="protein_g" type="number" min="0" step="0.1" value="{{ edit_item.protein_g if edit_item else '' }}" required />
+            </label>
+            <label class="field">
+              <span>Carbs g</span>
+              <input name="carbs_g" type="number" min="0" step="0.1" value="{{ edit_item.carbs_g if edit_item else '' }}" required />
+            </label>
+          </div>
+          <div class="settings-form-grid settings-form-grid-wide">
+            <label class="field">
+              <span>Fat g</span>
+              <input name="fat_g" type="number" min="0" step="0.1" value="{{ edit_item.fat_g if edit_item else '' }}" required />
+            </label>
+            <label class="field">
+              <span>Source label</span>
+              <input name="source_label" type="text" value="{{ edit_item.source_label if edit_item else '' }}" placeholder="Rice, white, cooked" />
+            </label>
+          </div>
+          <label class="field">
+            <span>Source reference</span>
+            <input name="source_reference" type="text" value="{{ edit_item.source_reference if edit_item else '' }}" placeholder="USDA FoodData Central" />
+          </label>
+          <label class="field">
+            <span>Notes</span>
+            <textarea name="source_notes" rows="4" placeholder="Optional notes">{{ edit_item.source_notes if edit_item else '' }}</textarea>
+          </label>
+          <div class="save-bar">
+            <a class="button-link secondary-link" href="/admin/db">Reset</a>
+            <button type="submit" class="button">{% if edit_item %}Update item{% else %}Create item{% endif %}</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Label Import</p>
+            <h2>Nutrition label to DB</h2>
+          </div>
+        </div>
+        <form class="stack" method="post" action="/admin/label-import" enctype="multipart/form-data">
+          <label class="field">
+            <span>Custom name</span>
+            <input type="text" name="custom_name" placeholder="Protein bar chocolate" required />
+          </label>
+          <label class="field upload">
+            <span>Nutrition label photo</span>
+            <input type="file" name="image" accept="image/*" capture="environment" required />
+            <p class="field-help">Use a front-facing label photo with calories, protein, carbs, fat, and serving size visible.</p>
+          </label>
+          <label class="field">
+            <span>Save into</span>
+            <select name="target_scope">
+              <option value="global">Master DB</option>
+              <option value="user">My custom foods</option>
+            </select>
+          </label>
+          <button type="submit" class="button">Import label</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Catalog</p>
+            <h2>Search nutrition items</h2>
+          </div>
+        </div>
+        <form class="admin-search" method="get" action="/admin/db">
+          <input name="q" type="text" value="{{ query }}" placeholder="Search name, source label, source key" />
+          <button type="submit" class="secondary">Search</button>
+        </form>
+        <div class="stack">
+          {% for item in nutrition_items %}
+          <article class="admin-card">
+            <div class="admin-card-header">
+              <div>
+                <strong>{{ item.canonical_name }}</strong>
+                <p>{{ item.calories }} kcal / {{ item.serving_grams }} g</p>
+              </div>
+              <div class="admin-actions">
+                <a class="button-link" href="/admin/db?edit_id={{ item.id }}{% if query %}&q={{ query }}{% endif %}">Edit</a>
+                <form method="post" action="/admin/nutrition-items/{{ item.id }}/delete">
+                  <input type="hidden" name="q" value="{{ query }}" />
+                  <button type="submit" class="secondary danger">Delete</button>
+                </form>
+              </div>
+            </div>
+            <div class="detail-stats admin-stats">
+              <div><span>Protein</span><strong>{{ item.protein_g }}</strong></div>
+              <div><span>Carbs</span><strong>{{ item.carbs_g }}</strong></div>
+              <div><span>Fat</span><strong>{{ item.fat_g }}</strong></div>
+            </div>
+            <p class="admin-meta">
+              Source: <strong>{{ item.primary_source_key or 'manual' }}</strong>
+              {% if item.source_label %} · {{ item.source_label }}{% endif %}
+            </p>
+          </article>
+          {% else %}
+          <div class="empty-state">No nutrition items matched this search.</div>
+          {% endfor %}
+        </div>
+      </section>
+    </section>
+
+    <section class="admin-grid">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Sources</p>
+            <h2>Registered source catalogs</h2>
+          </div>
+        </div>
+        <div class="stack">
+          {% for source in nutrition_sources %}
+          <article class="admin-card">
+            <strong>{{ source.source_key }}</strong>
+            <p>{{ source.source_name }}</p>
+            <p class="admin-meta">{{ source.region or 'Unknown region' }}{% if source.source_url %} · <a href="{{ source.source_url }}" target="_blank" rel="noreferrer">reference</a>{% endif %}</p>
+          </article>
+          {% else %}
+          <div class="empty-state">No nutrition sources loaded yet.</div>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Meals</p>
+            <h2>Recent stored meals</h2>
+          </div>
+        </div>
+        <div class="meal-list">
+          {% for meal in recent_meals %}
+          <article class="meal-row">
+            <div>
+              <strong>{{ meal.meal_name }}</strong>
+              <p>{{ meal.created_at }}</p>
+            </div>
+            <div class="meal-macros">
+              <span>{{ meal.total_calories }} kcal</span>
+              <span>P {{ meal.total_protein_g }} / C {{ meal.total_carbs_g }} / F {{ meal.total_fat_g }}</span>
+            </div>
+          </article>
+          {% else %}
+          <div class="empty-state">No meals saved for this user yet.</div>
+          {% endfor %}
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

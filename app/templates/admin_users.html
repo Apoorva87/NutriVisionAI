@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NutriSight Users</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <nav class="quick-nav" aria-label="Admin navigation">
+      <a href="/">Logger</a>
+      <a href="/history">History</a>
+      <a href="/admin/db">DB Portal</a>
+      <a href="/admin/users">Users</a>
+    </nav>
+
+    {% if message %}
+    <section class="panel status-panel">
+      <p class="status status-strong">{{ message }}</p>
+    </section>
+    {% endif %}
+
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Admin</p>
+        <h1>Registered Users</h1>
+        <p class="lede">User registrations, email identities, and how much history is stored for each account.</p>
+      </div>
+      <div class="dashboard-card">
+        <p class="card-label">Current Admin Session</p>
+        <p class="metric">{{ current_user.name }}</p>
+        <p class="submetric">{{ current_user.email }}</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <p class="eyebrow">Users</p>
+          <h2>User directory</h2>
+        </div>
+      </div>
+      <div class="stack">
+        {% for user in users %}
+        <article class="admin-card">
+          <div class="admin-card-header">
+            <div>
+              <strong>{{ user.name }}</strong>
+              <p class="admin-meta">{{ user.email }}</p>
+            </div>
+            {% if user.is_system %}
+            <span class="pill">system</span>
+            {% endif %}
+          </div>
+          <div class="detail-stats admin-stats">
+            <div><span>Meals</span><strong>{{ user.meal_count }}</strong></div>
+            <div><span>History points</span><strong>{{ user.history_point_count }}</strong></div>
+            <div><span>Custom foods</span><strong>{{ user.custom_food_count }}</strong></div>
+          </div>
+          <p class="admin-meta">Created {{ user.created_at }} · Last seen {{ user.last_seen_at }}</p>
+        </article>
+        {% else %}
+        <div class="empty-state">No registered users yet.</div>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+</body>
+</html>

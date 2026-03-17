@@ -1,0 +1,204 @@
+import json
+import shutil
+import tempfile
+import unittest
+import asyncio
+from io import BytesIO
+from pathlib import Path
+from unittest.mock import patch
+
+import app.config as config
+import app.db as db
+import app.main as main
+from app.schemas import AnalysisItem, AnalysisResult, NutritionTotals
+from app.providers.nutrition import calculate_item_nutrition
+from starlette.datastructures import UploadFile
+from starlette.requests import Request
+
+
+class ApiEndpointTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmpdir = Path(tempfile.mkdtemp(prefix="nutrisight-api-"))
+        self.seed_path = Path(__file__).resolve().parents[1] / "data" / "nutrition_seed.json"
+        self.db_path = self.tmpdir / "app.db"
+        self.upload_dir = self.tmpdir / "uploads"
+        self.upload_dir.mkdir(parents=True, exist_ok=True)
+        self.original_db_path = db.DB_PATH
+        self.original_config_db_path = config.DB_PATH
+        self.original_upload_dir = main.UPLOAD_DIR
+        db.DB_PATH = self.db_path
+        config.DB_PATH = self.db_path
+        main.UPLOAD_DIR = self.upload_dir
+        db.init_db(self.seed_path)
+
+    def make_request(self) -> Request:
+        return Request({"type": "http", "headers": [], "path": "/"})
+
+    def tearDown(self) -> None:
+        db.DB_PATH = self.original_db_path
+        config.DB_PATH = self.original_config_db_path
+        main.UPLOAD_DIR = self.original_upload_dir
+        shutil.rmtree(self.tmpdir, ignore_errors=True)
+
+    def test_analyze_endpoint_returns_structured_payload(self) -> None:
+        analysis = AnalysisResult(
+            image_path="/uploads/fake.jpg",
+            items=[
+                AnalysisItem(
+                    detected_name="rice",
+                    canonical_name="rice",
+                    portion_label="medium",
+                    estimated_grams=180,
+                    uncertainty="150-210g",
+                    confidence=0.91,
+                    vision_confidence=0.88,
+                    db_match=True,
+                    nutrition_available=True,
+                    calories=233.5,
+                    protein_g=4.9,
+                    carbs_g=50.7,
+                    fat_g=0.5,
+                )
+            ],
+            totals=NutritionTotals(
+                calories=233.5,
+                protein_g=4.9,
+                carbs_g=50.7,
+                fat_g=0.5,
+            ),
+            provider_metadata={
+                "model_provider": "lmstudio",
+                "portion_estimation_style": "grams_with_range",
+            },
+        )
+
+        with patch.object(main, "run_analysis", return_value=analysis):
+            response = asyncio.run(
+                main.analyze_image(
+                    image=UploadFile(file=BytesIO(b"fake-bytes"), filename="meal.jpg")
+                )
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode())
+        self.assertEqual(payload["items"][0]["detected_name"], "rice")
+        self.assertEqual(payload["provider_metadata"]["model_provider"], "lmstudio")
+        self.assertTrue((self.upload_dir / Path(payload["image_path"]).name).exists())
+
+    def test_save_meal_persists_and_aggregates_totals(self) -> None:
+        lunch = calculate_item_nutrition("rice", 200)
+        chicken = calculate_item_nutrition("chicken breast", 150)
+        items = [
+            {
+                "detected_name": "rice",
+                "canonical_name": "rice",
+                "portion_label": "medium",
+                "estimated_grams": 200,
+                "uncertainty": "160-240g",
+                "confidence": 0.9,
+                **lunch,
+            },
+            {
+                "detected_name": "chicken breast",
+                "canonical_name": "chicken breast",
+                "portion_label": "medium",
+                "estimated_grams": 150,
+                "uncertainty": "120-180g",
+                "confidence": 0.84,
+                **chicken,
+            },
+        ]
+
+        with patch.object(main, "insert_meal", return_value=101), patch.object(
+            main,
+            "fetch_daily_summary",
+            return_value={"calories": 0.0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0},
+        ), patch.object(
+            main,
+            "fetch_settings",
+            return_value={
+                "current_user_name": "alice",
+                "calorie_goal": 2200,
+                "macro_goals": {"protein_g": 160, "carbs_g": 220, "fat_g": 70},
+            },
+        ):
+            response = asyncio.run(
+                main.save_meal(
+                    request=self.make_request(),
+                    meal_name="Lunch",
+                    image_path="/uploads/lunch.jpg",
+                    items_json=json.dumps(items),
+                )
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode())
+        self.assertAlmostEqual(payload["totals"]["calories"], round(lunch["calories"] + chicken["calories"], 1))
+        self.assertEqual(payload["dashboard"]["calorie_goal"], 2200)
+
+    def test_save_meal_rejects_unknown_food(self) -> None:
+        response = asyncio.run(
+            main.save_meal(
+                request=self.make_request(),
+                meal_name="Lunch",
+                image_path="/uploads/lunch.jpg",
+                items_json=json.dumps(
+                    [
+                        {
+                            "detected_name": "unknown",
+                            "canonical_name": "definitely-not-food",
+                            "portion_label": "medium",
+                            "estimated_grams": 100,
+                            "uncertainty": "90-110g",
+                            "confidence": 0.5,
+                            "calories": 0,
+                            "protein_g": 0,
+                            "carbs_g": 0,
+                            "fat_g": 0,
+                        }
+                    ]
+                ),
+            )
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Map or remove", json.loads(response.body.decode())["error"])
+
+    def test_admin_nutrition_item_routes_create_and_delete(self) -> None:
+        create_response = asyncio.run(
+            main.admin_upsert_nutrition_item(
+                item_id=0,
+                canonical_name="paneer",
+                serving_grams=100,
+                calories=265,
+                protein_g=18.3,
+                carbs_g=1.2,
+                fat_g=20.8,
+                primary_source_key="ifct_2017",
+                source_label="Paneer",
+                source_reference="test row",
+                source_notes="created in test",
+                q="paneer",
+            )
+        )
+
+        self.assertEqual(create_response.status_code, 303)
+        created = db.fetch_nutrition_item("paneer")
+        self.assertIsNotNone(created)
+
+        delete_response = asyncio.run(
+            main.admin_remove_nutrition_item(item_id=int(created["id"]), q="paneer")
+        )
+        self.assertEqual(delete_response.status_code, 303)
+        self.assertIsNone(db.fetch_nutrition_item("paneer"))
+
+    def test_food_search_endpoint_returns_matches(self) -> None:
+        response = asyncio.run(main.food_search(q="rice", limit=5))
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode())
+        self.assertTrue(payload["items"])
+        self.assertTrue(any("rice" in item["canonical_name"] for item in payload["items"]))
+
+
+if __name__ == "__main__":
+    unittest.main()
