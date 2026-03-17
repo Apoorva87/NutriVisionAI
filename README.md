@@ -1,13 +1,15 @@
 # NutriSight
 
-NutriSight is a local-first meal tracking web app scaffold for photo-based nutrition logging. This repository currently implements the first vertical slice:
+NutriSight is a local-first FastAPI web app for photo-based nutrition logging. The current codebase is a working MVP, not just a scaffold. It already supports:
 
 - upload a meal image from desktop or phone browser
-- run a modular detection pipeline with local stub providers
+- compress images locally in the browser before upload when supported
+- run a modular analysis pipeline against LM Studio
 - normalize foods against a local nutrition dataset
 - estimate portions with uncertainty
 - review and edit the results before saving
-- store meals and aggregate daily calories and macros in SQLite
+- store user-specific meals and aggregate daily calories and macros in SQLite
+- custom foods, per-user history, and basic admin catalog tooling
 
 The project is being delivered in phases. The continuity log in `docs/EXECUTION_LOG.md` is the handoff record for future Codex sessions, and `docs/ROADMAP.md` tracks the remaining implementation sequence.
 
@@ -15,6 +17,7 @@ Project-maintenance docs:
 
 - `TODO.md` tracks the current backlog
 - `ARCHITECTURE.md` explains the runtime and code structure
+- `SIGNON.md` explains sign-in options and public deployment tradeoffs
 - `docs/EXECUTION_LOG.md` is the session-by-session handoff log
 
 ## Stack
@@ -22,6 +25,7 @@ Project-maintenance docs:
 - FastAPI server
 - Jinja templates + vanilla JavaScript
 - SQLite for meal and nutrition storage
+- LM Studio integration for multimodal analysis
 - Provider interfaces for vision and portion estimation
 
 ## Run
@@ -49,12 +53,11 @@ Implemented now:
 
 - image upload and local file storage
 - client-side image compression before upload when browser APIs allow it
-- JSON analysis endpoint
+- live LM Studio analysis path over the OpenAI-compatible API
 - food normalization
 - nutrition lookup and total calculation
 - source-backed nutrition catalog tables with importable source metadata
 - structured schemas and provider registry wiring
-- LM Studio provider path over the OpenAI-compatible API
 - user confirmation and editing flow
 - settings persistence for goals, provider selection, and portion style
 - settings persistence for LM Studio base URL and model identifiers
@@ -76,17 +79,17 @@ The local catalog is now materially populated, not just seeded:
 
 Still stubbed and ready for replacement:
 
-- vision model inference
-- LLM-assisted portion estimation
 - Ollama and API fallback backends
-- real USDA/Indian source ingests beyond the seeded catalog scaffold
+- richer production-grade prompt tuning and portion heuristics
+- broader Indian-food ingestion beyond the current seed rows and USDA import
+- stronger auth for public Internet deployments
 
 ## Suggested Next Improvements
 
-1. Replace the placeholder Ollama and API provider classes with working adapters.
-2. Feed real USDA and Indian source exports into `app.db.import_nutrition_catalog(...)`.
-3. Extend tests from persistence math into API endpoint coverage.
-4. Add confidence-threshold states and explicit unknown-food review flows.
+1. Add personalized food-search ranking and repeat-last-meal shortcuts.
+2. Expand the Indian-food catalog beyond the current seed rows.
+3. Add confidence-threshold states and explicit unknown-food review flows.
+4. Add stronger auth for any deployment exposed outside a trusted LAN.
 5. Keep improving duplicate-item suppression and weight estimation on complex multi-dish plates.
 
 ## Nutrition Catalog Import
@@ -128,6 +131,16 @@ That bootstrap flow recreates the exact paths already expected by the importer:
 The current LM Studio integration uses the OpenAI-compatible `POST /v1/chat/completions` path with image input.
 
 For your current deployment, the expected base URL is `http://192.168.0.143:1234`.
+
+## Auth and Deployment
+
+The current app supports lightweight email-based local registration and persistent device sessions for trusted LAN use.
+
+If you want Google sign-in or public Internet access, read:
+
+- `SIGNON.md`
+
+Important constraint: Google Sign-In for web requires HTTPS for production web origins and login endpoints. `localhost` is allowed for local development, but bare LAN HTTP URLs such as `http://192.168.x.x:8000` are not a good production target for Google sign-in.
 
 ## Continuity Log
 

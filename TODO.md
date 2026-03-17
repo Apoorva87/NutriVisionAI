@@ -38,6 +38,7 @@
 - Extend the DB portal to manage aliases and source rows, not just nutrition items.
 - Add CSV/JSON import-export from the DB portal.
 - Add basic auth if the app is exposed beyond a trusted LAN.
+- Add Google sign-in once the app has a stable HTTPS hostname.
 - Add backup/restore flow for the SQLite DB and uploaded images.
 
 ## Testing

@@ -204,6 +204,7 @@ The app currently uses LM Studio for live multimodal analysis and SQLite for all
 - No bulk import UI yet for nutrition sources.
 - No recipe decomposition layer yet for mixed foods beyond coarse canonical mappings.
 - No background jobs or queueing; all analysis runs inline with the request.
+- No production-grade third-party auth yet; current auth is lightweight and intended for trusted LAN use.
 
 ## Recommended Next Steps
 

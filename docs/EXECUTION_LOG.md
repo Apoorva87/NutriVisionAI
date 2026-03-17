@@ -696,3 +696,34 @@ This file is the continuity log for future Codex sessions. Update it at the end 
 1. Rewrite the local branch tip so the previously committed `data/imports` artifacts are no longer in history, then push.
 2. Add personalized food-search ranking and repeat-last-meal shortcuts.
 3. Continue expanding Indian-food coverage beyond the current seed rows.
+
+## 2026-03-17 Session 19
+
+### Scope
+
+- refreshed `README.md` so it better reflects the current MVP state instead of describing the app as mostly scaffold-only
+- added `SIGNON.md` covering Google sign-in requirements, HTTPS constraints, hosting tradeoffs, and low-cost deployment paths
+- updated backlog and architecture notes to make the current auth boundary explicit
+
+### Files Added
+
+- `SIGNON.md`
+
+### Files Updated
+
+- `README.md`
+- `TODO.md`
+- `ARCHITECTURE.md`
+- `docs/EXECUTION_LOG.md`
+
+### Notes
+
+- the current built-in email session flow is still appropriate for trusted LAN use
+- Google sign-in should be deferred until the app is reachable on a stable HTTPS hostname
+- the recommended low-cost public path remains self-hosting plus Caddy or Cloudflare Tunnel, keeping LM Studio private on the LAN
+
+### Next Recommended Phase
+
+1. Add personalized food-search ranking and repeat-last-meal shortcuts.
+2. Add stronger auth and admin protection if the app is going online.
+3. Continue expanding Indian-food coverage and prompt quality.
