@@ -22,7 +22,7 @@ Project-maintenance docs:
 
 Live static template preview on GitHub Pages:
 
-- `https://apoorva87.github.io/NutriVisionAI/`
+- [https://apoorva87.github.io/NutriVisionAI/](https://apoorva87.github.io/NutriVisionAI/)
 
 ## Stack
 
@@ -57,7 +57,7 @@ The repo includes a GitHub Actions workflow that renders static preview versions
 
 Pages URL:
 
-- `https://apoorva87.github.io/NutriVisionAI/`
+- [https://apoorva87.github.io/NutriVisionAI/](https://apoorva87.github.io/NutriVisionAI/)
 
 What the preview is:
 
@@ -76,7 +76,7 @@ How to enable it in GitHub:
 2. Go to `Settings` -> `Pages`.
 3. Under `Build and deployment`, set `Source` to `GitHub Actions`.
 4. Push to `main` or manually run the `Deploy Template Preview` workflow from the `Actions` tab.
-5. Wait for the workflow to finish, then open `https://apoorva87.github.io/NutriVisionAI/`.
+5. Wait for the workflow to finish, then open [https://apoorva87.github.io/NutriVisionAI/](https://apoorva87.github.io/NutriVisionAI/).
 
 How it works in this repo:
 
