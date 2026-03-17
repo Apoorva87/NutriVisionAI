@@ -20,6 +20,10 @@ Project-maintenance docs:
 - `SIGNON.md` explains sign-in options and public deployment tradeoffs
 - `docs/EXECUTION_LOG.md` is the session-by-session handoff log
 
+Live static template preview on GitHub Pages:
+
+- `https://apoorva87.github.io/NutriVisionAI/`
+
 ## Stack
 
 - FastAPI server
@@ -46,6 +50,39 @@ python3 -m unittest discover -s tests -v
 ```
 
 Current test coverage includes nutrition math, daily aggregation, endpoint save validation, user-scoped trend helpers, and LM Studio payload parsing.
+
+## GitHub Pages Preview
+
+The repo includes a GitHub Actions workflow that renders static preview versions of the Jinja templates and publishes them to GitHub Pages.
+
+Pages URL:
+
+- `https://apoorva87.github.io/NutriVisionAI/`
+
+What the preview is:
+
+- a static rendered preview of the real templates
+- sample data injected into the same pages used by the app
+- useful for checking layout and mobile presentation on GitHub
+
+What the preview is not:
+
+- it is not the live FastAPI app
+- forms, uploads, database actions, and API calls do not work on GitHub Pages
+
+How to enable it in GitHub:
+
+1. Open the GitHub repo.
+2. Go to `Settings` -> `Pages`.
+3. Under `Build and deployment`, set `Source` to `GitHub Actions`.
+4. Push to `main` or manually run the `Deploy Template Preview` workflow from the `Actions` tab.
+5. Wait for the workflow to finish, then open `https://apoorva87.github.io/NutriVisionAI/`.
+
+How it works in this repo:
+
+- workflow: `.github/workflows/pages.yml`
+- renderer: `scripts/render_template_previews.py`
+- output directory: `site/`
 
 ## What Is Real vs Stubbed
 

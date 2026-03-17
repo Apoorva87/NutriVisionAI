@@ -53,3 +53,4 @@
 - Keep `docs/EXECUTION_LOG.md` updated after each substantial pass.
 - Keep `ARCHITECTURE.md` aligned with any new routes or provider integrations.
 - Document the expected import payload shape for nutrition catalogs more formally.
+- Keep the GitHub Pages static preview aligned with template/layout changes.

@@ -727,3 +727,34 @@ This file is the continuity log for future Codex sessions. Update it at the end 
 1. Add personalized food-search ranking and repeat-last-meal shortcuts.
 2. Add stronger auth and admin protection if the app is going online.
 3. Continue expanding Indian-food coverage and prompt quality.
+
+## 2026-03-17 Session 20
+
+### Scope
+
+- added a static template preview renderer for GitHub Pages
+- added a GitHub Actions workflow that builds and deploys rendered previews from `main`
+- updated the README with the expected Pages URL and the exact GitHub Pages setup steps
+
+### Files Added
+
+- `scripts/render_template_previews.py`
+- `.github/workflows/pages.yml`
+
+### Files Updated
+
+- `README.md`
+- `ARCHITECTURE.md`
+- `TODO.md`
+- `docs/EXECUTION_LOG.md`
+
+### Notes
+
+- GitHub Pages can only host static files, so the workflow renders sample-data previews of the Jinja templates instead of publishing the raw templates
+- the Pages site is for layout review only; uploads, API calls, and DB actions remain disabled there
+
+### Next Recommended Phase
+
+1. Verify the deployed GitHub Pages preview after the workflow runs.
+2. Add personalized food-search ranking and repeat-last-meal shortcuts.
+3. Tighten admin protection before any public deployment.

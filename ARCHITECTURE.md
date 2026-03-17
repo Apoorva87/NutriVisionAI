@@ -27,6 +27,9 @@ The app currently uses LM Studio for live multimodal analysis and SQLite for all
 - Frontend behavior and mobile UX:
   - [app/static/app.js](/Users/akarnik/experiments/NutriVisionAI/app/static/app.js)
   - [app/static/styles.css](/Users/akarnik/experiments/NutriVisionAI/app/static/styles.css)
+- Static GitHub Pages preview renderer:
+  - [scripts/render_template_previews.py](/Users/akarnik/experiments/NutriVisionAI/scripts/render_template_previews.py)
+  - [.github/workflows/pages.yml](/Users/akarnik/experiments/NutriVisionAI/.github/workflows/pages.yml)
 
 ### Analysis Pipeline
 
