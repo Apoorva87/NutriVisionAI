@@ -5,6 +5,7 @@ __pycache__/
 uploads/*
 !uploads/.gitkeep
 app.db
+site/
 data/imports/**
 !data/imports/.gitkeep
 !data/imports/README.md
