@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Scan Meal — NutriSight{% endblock %}
+{% block content %}
+
+<h1 class="mb-12">Scan a meal</h1>
+
+<div id="capture-step">
+  <div class="stack">
+    <label class="field">
+      <span>Meal name</span>
+      <input id="meal-name" type="text" placeholder="Lunch" required />
+    </label>
+
+    <div class="capture-area" id="capture-area">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <span>Tap to take a photo or choose from gallery</span>
+      <img class="preview-thumb hidden" id="preview-thumb" alt="Preview" />
+      <input type="file" id="image-input" accept="image/*" capture="environment" />
+    </div>
+
+    <button type="button" id="analyze-btn" disabled>Analyze Photo</button>
+  </div>
+</div>
+
+<div id="analyzing-step" class="hidden">
+  <div class="analyzing">
+    <div class="spinner"></div>
+    <p>Analyzing your meal photo&hellip;<br><span class="small">This usually takes 15&ndash;30 seconds</span></p>
+  </div>
+</div>
+
+<div id="review-step" class="hidden">
+  <div class="item-header mb-12">
+    <span class="section-title">Detected foods</span>
+    <button type="button" id="add-item-btn" class="btn-secondary btn-small btn-icon" style="width:auto;">+ Add</button>
+  </div>
+
+  <div id="items-list" class="stack-sm"></div>
+
+  <div class="total-bar" id="total-bar">
+    <div>
+      <div class="total-cal"><span id="total-cal">0</span> kcal</div>
+      <div class="total-macros">P <span id="total-p">0</span> · C <span id="total-c">0</span> · F <span id="total-f">0</span></div>
+    </div>
+    <button type="button" id="save-btn" disabled>Save</button>
+  </div>
+</div>
+
+<div id="food-search-overlay" class="search-overlay hidden">
+  <div class="search-header">
+    <input type="text" id="food-search-input" placeholder="Search foods..." inputmode="search" autocomplete="off" />
+    <button type="button" id="food-search-close" class="btn-secondary btn-small">Cancel</button>
+  </div>
+  <div id="food-search-results" class="search-results"></div>
+</div>
+
+<!-- Macro edit modal -->
+<div id="macro-edit-modal" class="search-overlay hidden">
+  <div style="flex:1; display:flex; flex-direction:column; justify-content:center; padding:20px;">
+    <div class="card">
+      <h3 class="macro-edit-title mb-12">Edit macros</h3>
+      <form class="stack">
+        <div class="field-row">
+          <label class="field"><span>Calories</span><input name="cal" type="number" min="0" step="1" required /></label>
+          <label class="field"><span>Protein (g)</span><input name="protein" type="number" min="0" step="0.1" required /></label>
+        </div>
+        <div class="field-row">
+          <label class="field"><span>Carbs (g)</span><input name="carbs" type="number" min="0" step="0.1" required /></label>
+          <label class="field"><span>Fat (g)</span><input name="fat" type="number" min="0" step="0.1" required /></label>
+        </div>
+        <button type="submit">Apply</button>
+        <div class="field-row">
+          <button type="button" id="macro-edit-reset" class="btn-secondary">Reset to auto</button>
+          <button type="button" id="macro-edit-cancel" class="btn-secondary">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/analyze.js"></script>
+{% endblock %}

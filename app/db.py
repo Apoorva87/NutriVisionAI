@@ -982,3 +982,98 @@ def fetch_top_foods(user_name: str, limit: int = 10, user_id: Optional[int] = No
     ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+def delete_meal(meal_id: int, user_id: int) -> bool:
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "DELETE FROM meals WHERE id = ? AND user_id = ?",
+        (int(meal_id), int(user_id)),
+    )
+    deleted = cur.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted
+
+
+def update_meal(meal_id: int, user_id: int, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    cur = conn.cursor()
+
+    row = cur.execute(
+        "SELECT * FROM meals WHERE id = ? AND user_id = ?",
+        (int(meal_id), int(user_id)),
+    ).fetchone()
+    if not row:
+        conn.close()
+        return None
+
+    if "meal_name" in updates:
+        cur.execute(
+            "UPDATE meals SET meal_name = ? WHERE id = ?",
+            (updates["meal_name"], int(meal_id)),
+        )
+
+    if "items" in updates:
+        cur.execute("DELETE FROM meal_items WHERE meal_id = ?", (int(meal_id),))
+
+        total_calories = 0.0
+        total_protein_g = 0.0
+        total_carbs_g = 0.0
+        total_fat_g = 0.0
+
+        for item in updates["items"]:
+            cur.execute(
+                """
+                INSERT INTO meal_items(
+                    meal_id, detected_name, canonical_name, portion_label, estimated_grams,
+                    uncertainty, confidence, calories, protein_g, carbs_g, fat_g
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(meal_id),
+                    item["detected_name"],
+                    item["canonical_name"],
+                    item["portion_label"],
+                    item["estimated_grams"],
+                    item["uncertainty"],
+                    item["confidence"],
+                    item["calories"],
+                    item["protein_g"],
+                    item["carbs_g"],
+                    item["fat_g"],
+                ),
+            )
+            total_calories += float(item["calories"])
+            total_protein_g += float(item["protein_g"])
+            total_carbs_g += float(item["carbs_g"])
+            total_fat_g += float(item["fat_g"])
+
+        cur.execute(
+            """
+            UPDATE meals
+            SET total_calories = ?, total_protein_g = ?, total_carbs_g = ?, total_fat_g = ?
+            WHERE id = ?
+            """,
+            (total_calories, total_protein_g, total_carbs_g, total_fat_g, int(meal_id)),
+        )
+
+    conn.commit()
+
+    meal = cur.execute("SELECT * FROM meals WHERE id = ?", (int(meal_id),)).fetchone()
+    items = cur.execute(
+        """
+        SELECT detected_name, canonical_name, portion_label, estimated_grams, uncertainty,
+               confidence, calories, protein_g, carbs_g, fat_g
+        FROM meal_items
+        WHERE meal_id = ?
+        ORDER BY id
+        """,
+        (int(meal_id),),
+    ).fetchall()
+    conn.close()
+
+    payload = dict(meal)
+    payload["items"] = [dict(r) for r in items]
+    return payload

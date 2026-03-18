@@ -27,59 +27,9 @@ def sample_context() -> dict:
         "macro_goals": {"protein_g": 160, "carbs_g": 220, "fat_g": 70},
         "model_provider": "lmstudio",
         "portion_estimation_style": "grams_with_range",
-        "lmstudio_base_url": "http://192.168.0.143:1234",
+        "lmstudio_base_url": "http://localhost:1234",
         "lmstudio_vision_model": "qwen/qwen3-vl-8b",
         "lmstudio_portion_model": "qwen/qwen3-vl-8b",
-    }
-    meal_detail = {
-        "meal_name": "Indian thali lunch",
-        "created_at": "2026-03-17T13:05:00",
-        "total_calories": 842.0,
-        "total_protein_g": 28.4,
-        "total_carbs_g": 112.6,
-        "total_fat_g": 29.8,
-        "items": [
-            {
-                "canonical_name": "rice",
-                "detected_name": "rice",
-                "estimated_grams": 180,
-                "calories": 233.5,
-                "protein_g": 4.9,
-                "carbs_g": 50.7,
-                "fat_g": 0.5,
-                "confidence": 0.93,
-            },
-            {
-                "canonical_name": "dal",
-                "detected_name": "dal",
-                "estimated_grams": 150,
-                "calories": 174.0,
-                "protein_g": 10.8,
-                "carbs_g": 30.2,
-                "fat_g": 0.6,
-                "confidence": 0.84,
-            },
-            {
-                "canonical_name": "naan",
-                "detected_name": "naan",
-                "estimated_grams": 90,
-                "calories": 262.0,
-                "protein_g": 8.7,
-                "carbs_g": 46.4,
-                "fat_g": 5.1,
-                "confidence": 0.79,
-            },
-            {
-                "canonical_name": "vegetables",
-                "detected_name": "vegetable curry",
-                "estimated_grams": 120,
-                "calories": 78.0,
-                "protein_g": 2.6,
-                "carbs_g": 14.2,
-                "fat_g": 1.4,
-                "confidence": 0.72,
-            },
-        ],
     }
     recent_meals = [
         {
@@ -108,15 +58,8 @@ def sample_context() -> dict:
         "fat_g": 41.8,
         "calorie_goal": 2200,
         "remaining_calories": 938.0,
+        "macro_goals": {"protein_g": 160, "carbs_g": 220, "fat_g": 70},
     }
-    available_foods = [
-        {"canonical_name": "rice"},
-        {"canonical_name": "dal"},
-        {"canonical_name": "naan"},
-        {"canonical_name": "vegetables"},
-        {"canonical_name": "chicken breast"},
-        {"canonical_name": "paneer"},
-    ]
     custom_foods = [
         {
             "id": 1,
@@ -149,22 +92,28 @@ def sample_context() -> dict:
         "is_system": False,
     }
     return {
-        "index": {
-            "settings": settings,
-            "recent_meals": recent_meals,
-            "available_foods": available_foods,
-            "today": "2026-03-17",
-            "custom_foods": custom_foods,
-            "meal_detail": meal_detail,
-            "provider_status": provider_status,
-            "message": "Static GitHub Pages preview. Forms and API actions are disabled here.",
-            "current_user": current_user,
+        "dashboard": {
             "dashboard": dashboard,
-            "user_name": current_user["name"],
+            "recent_meals": recent_meals,
+            "current_user": current_user,
+            "message": "Static GitHub Pages preview. Forms and API actions are disabled here.",
+            "active_tab": "home",
+            "llm_base_url": settings["lmstudio_base_url"],
+            "llm_model": settings["lmstudio_vision_model"],
+            "llm_provider": settings["model_provider"],
+        },
+        "analyze": {
+            "current_user": current_user,
+            "active_tab": "scan",
+        },
+        "log": {
+            "current_user": current_user,
+            "custom_foods": custom_foods,
+            "active_tab": "log",
         },
         "history": {
-            "user_name": current_user["name"],
             "current_user": current_user,
+            "active_tab": "history",
             "top_foods": [
                 {"canonical_name": "rice", "item_count": 18, "total_calories": 2110},
                 {"canonical_name": "dal", "item_count": 11, "total_calories": 1334},
@@ -176,11 +125,17 @@ def sample_context() -> dict:
                 {"day": "2026-03-15", "calories": 1734, "protein_g": 118, "carbs_g": 161, "fat_g": 63, "meal_count": 3},
             ],
             "grouped_meals": [
-                {"day": "2026-03-17", "meals": recent_meals},
+                {
+                    "day": "2026-03-17",
+                    "summary": {"calories": 1262, "meal_count": 2},
+                    "meals": recent_meals,
+                },
                 {
                     "day": "2026-03-16",
+                    "summary": {"calories": 711, "meal_count": 1},
                     "meals": [
                         {
+                            "id": 9,
                             "meal_name": "Paneer wrap dinner",
                             "created_at": "2026-03-16T20:10:00",
                             "total_calories": 711,
@@ -192,9 +147,16 @@ def sample_context() -> dict:
                 },
             ],
         },
-        "admin_db": {
-            "user_name": current_user["name"],
+        "settings": {
+            "settings": settings,
             "current_user": current_user,
+            "provider_status": provider_status,
+            "message": "Static GitHub Pages preview.",
+            "active_tab": "settings",
+        },
+        "admin_db": {
+            "current_user": current_user,
+            "user_name": current_user["name"],
             "db_overview": {
                 "nutrition_item_count": 7849,
                 "nutrition_source_count": 3,
@@ -217,17 +179,6 @@ def sample_context() -> dict:
                     "primary_source_key": "usda_fdc_foundation",
                     "source_label": "Rice, white, cooked",
                 },
-                {
-                    "id": 2,
-                    "canonical_name": "dal",
-                    "serving_grams": 100,
-                    "calories": 116,
-                    "protein_g": 7.2,
-                    "carbs_g": 20.1,
-                    "fat_g": 0.4,
-                    "primary_source_key": "ifct_2017",
-                    "source_label": "Dal, cooked",
-                },
             ],
             "nutrition_sources": [
                 {
@@ -236,23 +187,12 @@ def sample_context() -> dict:
                     "region": "United States",
                     "source_url": "https://fdc.nal.usda.gov/",
                 },
-                {
-                    "source_key": "usda_fdc_sr_legacy",
-                    "source_name": "USDA FoodData Central SR Legacy",
-                    "region": "United States",
-                    "source_url": "https://fdc.nal.usda.gov/",
-                },
-                {
-                    "source_key": "ifct_2017",
-                    "source_name": "Indian Food Composition Tables 2017",
-                    "region": "India",
-                    "source_url": "https://www.nin.res.in/ebooks/IFCT2017_16122024.pdf",
-                },
             ],
             "recent_meals": recent_meals,
+            "settings": settings,
         },
         "admin_users": {
-            "message": "Static GitHub Pages preview. This page shows sample server data only.",
+            "message": "Static GitHub Pages preview.",
             "current_user": current_user,
             "users": [
                 {
@@ -265,16 +205,6 @@ def sample_context() -> dict:
                     "last_seen_at": "2026-03-17T14:20:00",
                     "is_system": False,
                 },
-                {
-                    "name": "System User",
-                    "email": "default@local.nutrisight",
-                    "meal_count": 0,
-                    "history_point_count": 0,
-                    "custom_food_count": 0,
-                    "created_at": "2026-03-01T09:00:00",
-                    "last_seen_at": "2026-03-17T09:00:00",
-                    "is_system": True,
-                },
             ],
         },
     }
@@ -283,8 +213,14 @@ def sample_context() -> dict:
 def rewrite_preview_links(html: str) -> str:
     replacements = {
         'href="/static/styles.css"': 'href="static/styles.css"',
+        'src="/static/shared.js"': 'src="static/shared.js"',
         'src="/static/app.js"': 'src="static/app.js"',
+        'src="/static/analyze.js"': 'src="static/analyze.js"',
+        'src="/static/log.js"': 'src="static/log.js"',
         'href="/history"': 'href="history.html"',
+        'href="/analyze"': 'href="analyze.html"',
+        'href="/log"': 'href="log.html"',
+        'href="/settings"': 'href="settings.html"',
         'href="/admin/db"': 'href="admin_db.html"',
         'href="/admin/users"': 'href="admin_users.html"',
         'href="/"': 'href="index.html"',
@@ -335,8 +271,11 @@ def main() -> None:
     context = sample_context()
     copy_static_assets()
 
-    render_page(env, "index.html", "index.html", context["index"])
-    render_page(env, "history.html", "history.html", context["history"])
+    render_page(env, "dashboard.html", "index.html", context["dashboard"])
+    render_page(env, "analyze.html", "analyze.html", context["analyze"])
+    render_page(env, "log.html", "log.html", context["log"])
+    render_page(env, "history_new.html", "history.html", context["history"])
+    render_page(env, "settings.html", "settings.html", context["settings"])
     render_page(env, "admin_db.html", "admin_db.html", context["admin_db"])
     render_page(env, "admin_users.html", "admin_users.html", context["admin_users"])
 

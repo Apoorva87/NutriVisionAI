@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}NutriSight{% endblock %}
+{% block content %}
+{% set d = dashboard %}
+{% set meals = recent_meals | default([], true) %}
+
+{% if current_user.is_system %}
+<div class="login-banner">
+  <p>Sign in so meals stay tied to you</p>
+  <form method="post" action="/auth/session" class="field-row">
+    <input type="text" name="name" placeholder="Name" required />
+    <input type="email" name="email" placeholder="Email" required />
+    <button type="submit" class="btn-small">Go</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="dashboard-card" id="dashboard-card">
+  <p class="eyebrow">Today</p>
+  <div class="calorie-row">
+    <span class="calorie-big" id="dash-cal">{{ dashboard.calories | round(0) | int }}</span>
+    <span class="calorie-of">/ {{ dashboard.calorie_goal }} kcal</span>
+  </div>
+  <p class="calorie-remaining"><span id="dash-remaining">{{ dashboard.remaining_calories | round(0) | int }}</span> kcal remaining</p>
+  <div class="macro-row">
+    <div class="macro-pill">
+      <span class="macro-value" id="dash-protein">{{ dashboard.protein_g | round(0) | int }}</span>
+      <span class="macro-label">Protein</span>
+    </div>
+    <div class="macro-pill">
+      <span class="macro-value" id="dash-carbs">{{ dashboard.carbs_g | round(0) | int }}</span>
+      <span class="macro-label">Carbs</span>
+    </div>
+    <div class="macro-pill">
+      <span class="macro-value" id="dash-fat">{{ dashboard.fat_g | round(0) | int }}</span>
+      <span class="macro-label">Fat</span>
+    </div>
+  </div>
+</div>
+
+<div class="quick-actions">
+  <a href="/analyze" class="quick-action quick-action-primary">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    Scan Meal
+  </a>
+  <a href="/log" class="quick-action quick-action-secondary">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    Quick Log
+  </a>
+</div>
+
+<!-- AI meal suggestions -->
+<div id="reco-section" class="hidden">
+  <div class="reco-header">
+    <h2 class="mb-0">Meal plan for the rest of the day</h2>
+    <button type="button" id="reco-refresh" class="btn-icon btn-secondary btn-small" title="Refresh suggestions">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+    </button>
+  </div>
+  <div class="reco-hint-row">
+    <input type="text" id="reco-hint" placeholder="Craving? e.g. indian, pasta, salad..." class="reco-hint-input" />
+  </div>
+  <div id="reco-cards" class="stack-sm"></div>
+</div>
+
+<h2>Recent meals</h2>
+{% if meals %}
+  {% for meal in meals %}
+  <div class="card-compact dash-meal" data-meal-id="{{ meal.id }}">
+    <div class="card-body">
+      <strong>{{ meal.meal_name }}</strong>
+      <p>{{ meal.created_at }}</p>
+    </div>
+    <div class="card-end">{{ meal.total_calories | round(0) | int }} kcal</div>
+    <button type="button" class="dash-meal-del btn-icon btn-danger btn-small" title="Delete meal">&times;</button>
+  </div>
+  {% endfor %}
+  <a href="/history" class="btn-secondary mt-12" style="text-align:center; text-decoration:none; display:block;">View all history</a>
+{% else %}
+  <div class="empty-state">No meals logged yet. Scan or log your first meal!</div>
+{% endif %}
+
+{% if message %}
+<div class="status mt-12">{{ message }}</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const dashCard = document.getElementById("dashboard-card");
+  const stored = sessionStorage.getItem("nutrisight_dashboard");
+  if (stored) {
+    try {
+      const d = JSON.parse(stored);
+      document.getElementById("dash-cal").textContent = Math.round(safeNumber(d.calories));
+      document.getElementById("dash-remaining").textContent = Math.round(safeNumber(d.remaining_calories));
+      document.getElementById("dash-protein").textContent = Math.round(safeNumber(d.protein_g));
+      document.getElementById("dash-carbs").textContent = Math.round(safeNumber(d.carbs_g));
+      document.getElementById("dash-fat").textContent = Math.round(safeNumber(d.fat_g));
+      dashCard.classList.add("is-updated");
+      window.setTimeout(() => dashCard.classList.remove("is-updated"), 800);
+    } catch (e) {}
+    sessionStorage.removeItem("nutrisight_dashboard");
+  }
+
+  // ── AI meal recommendations (calls LM Studio directly) ──
+  const recoCards = document.getElementById("reco-cards");
+  const recoSection = document.getElementById("reco-section");
+  const recoHint = document.getElementById("reco-hint");
+  const recoRefresh = document.getElementById("reco-refresh");
+
+  const llmBaseUrl = "{{ llm_base_url }}";
+  const llmModel = "{{ llm_model }}";
+  const llmProvider = "{{ llm_provider }}";
+
+  // Nutrition context from server
+  const dashData = {
+    calories: {{ dashboard.calories | round(0) | int }},
+    calorie_goal: {{ dashboard.calorie_goal }},
+    remaining_cal: {{ dashboard.remaining_calories | round(0) | int }},
+    protein_g: {{ dashboard.protein_g | round(0) | int }},
+    carbs_g: {{ dashboard.carbs_g | round(0) | int }},
+    fat_g: {{ dashboard.fat_g | round(0) | int }},
+    protein_goal: {{ dashboard.macro_goals.protein_g | default(160, true) }},
+    carbs_goal: {{ dashboard.macro_goals.carbs_g | default(220, true) }},
+    fat_goal: {{ dashboard.macro_goals.fat_g | default(70, true) }},
+    eaten: [{% for m in recent_meals %}"{{ m.meal_name | replace('"', '\\"') }}"{% if not loop.last %},{% endif %}{% endfor %}],
+  };
+
+  // Meal schedule: breakfast 8am, lunch 12pm, snack 4pm, dinner 7pm
+  function getRemainingMeals() {
+    const h = new Date().getHours();
+    if (h < 8)  return ["breakfast", "lunch", "snack", "dinner"];
+    if (h < 12) return ["lunch", "snack", "dinner"];
+    if (h < 16) return ["snack", "dinner"];
+    if (h < 21) return ["dinner"];
+    return [];
+  }
+
+  function currentTimeStr() {
+    const now = new Date();
+    const h = now.getHours();
+    const m = now.getMinutes();
+    const ampm = h >= 12 ? "pm" : "am";
+    return `${((h % 12) || 12)}:${m < 10 ? "0" + m : m}${ampm}`;
+  }
+
+  function buildRecoPrompt(hint) {
+    const d = dashData;
+    const remP = Math.max(0, d.protein_goal - d.protein_g);
+    const remC = Math.max(0, d.carbs_goal - d.carbs_g);
+    const remF = Math.max(0, d.fat_goal - d.fat_g);
+    const meals = getRemainingMeals();
+    const eaten = d.eaten.length ? d.eaten.join(", ") : "nothing yet";
+    const hintLine = hint
+      ? ` The user has a preference/craving: "${hint}". Incorporate this into your suggestions.`
+      : ` Default preference: Indian vegetarian cuisine. Suggest Indian vegetarian meals unless overridden.`;
+
+    return `You are a nutrition assistant. The current time is ${currentTimeStr()}. ` +
+      `The user's meal schedule is: breakfast at 8am, lunch at 12pm, snack at 4pm, dinner at 7pm. ` +
+      `Based on the current time, the ONLY remaining meal slots are: ${meals.join(", ")}. ` +
+      `Do NOT suggest meals for slots that have already passed. ` +
+      `Eaten so far today: ${eaten}. ` +
+      `REMAINING budget to fill across ALL suggestions: ${d.remaining_cal} kcal, ${remP}g protein, ${remC}g carbs, ${remF}g fat. ` +
+      `Daily goals: ${d.calorie_goal} kcal, ${d.protein_goal}g protein, ${d.carbs_goal}g carbs, ${d.fat_goal}g fat. ` +
+      `IMPORTANT: The total calories across ALL suggestions MUST roughly add up to ${d.remaining_cal} kcal. ` +
+      `Distribute sensibly — dinner ~35-40%, lunch ~30-35%, snack ~10-15%, breakfast ~20-25%.${hintLine} ` +
+      `For EACH remaining meal slot, suggest exactly 2 different options (so the user can choose). ` +
+      `For each suggestion, include approximate weights of the main ingredients (e.g. "150g chicken breast, 200g rice, 100g broccoli"). ` +
+      `Reply ONLY with a JSON array. Each object has: meal (must be one of: ${meals.join(", ")}), ` +
+      `option (1 or 2), food (specific name), ingredients (string with approx weights, e.g. "150g chicken, 200g rice, 50g peppers"), ` +
+      `reason (1 sentence), calories (int), protein_g (int), carbs_g (int), fat_g (int). ` +
+      `Example: [{"meal":"dinner","option":1,"food":"Grilled salmon with rice","ingredients":"180g salmon fillet, 200g steamed rice, 100g asparagus","reason":"High protein and omega-3","calories":600,"protein_g":45,"carbs_g":50,"fat_g":20},` +
+      `{"meal":"dinner","option":2,"food":"Chicken stir-fry","ingredients":"200g chicken breast, 150g mixed vegetables, 180g noodles, 10ml sesame oil","reason":"Lean protein with veggies","calories":550,"protein_g":42,"carbs_g":45,"fat_g":18}]`;
+  }
+
+  function renderSuggestions(suggestions) {
+    // Group by meal slot
+    const groups = {};
+    suggestions.forEach((s) => {
+      const meal = s.meal || "meal";
+      if (!groups[meal]) groups[meal] = [];
+      groups[meal].push(s);
+    });
+
+    let html = "";
+    for (const [meal, items] of Object.entries(groups)) {
+      html += `<div class="reco-group">`;
+      html += `<div class="reco-group-label">${escapeHtml(meal)}</div>`;
+      html += `<div class="reco-group-options">`;
+      items.forEach((s, i) => {
+        html += `
+          <div class="reco-card">
+            <div class="reco-body">
+              <strong>${escapeHtml(s.food || "")}</strong>
+              ${s.ingredients ? `<p class="reco-ingredients">${escapeHtml(s.ingredients)}</p>` : ''}
+              <p>${escapeHtml(s.reason || "")}</p>
+            </div>
+            <div class="reco-stats">
+              <span class="reco-cal">${s.calories ? s.calories + ' kcal' : ''}</span>
+              ${s.protein_g != null ? `<span class="reco-macros">P${s.protein_g} C${s.carbs_g || 0} F${s.fat_g || 0}</span>` : ''}
+            </div>
+          </div>`;
+      });
+      html += `</div></div>`;
+    }
+    recoCards.innerHTML = html;
+  }
+
+  function parseJsonArray(text) {
+    try { const r = JSON.parse(text); if (Array.isArray(r)) return r; } catch (e) {}
+    const start = text.indexOf("[");
+    if (start === -1) return [];
+    let depth = 0, inStr = false, esc = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (esc) { esc = false; continue; }
+      if (ch === "\\") { esc = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === "[") depth++;
+      else if (ch === "]") { depth--; if (depth === 0) { try { return JSON.parse(text.slice(start, i + 1)); } catch (e) {} break; } }
+    }
+    return [];
+  }
+
+  async function loadRecommendations() {
+    if (llmProvider === "stub" || !llmBaseUrl || !llmModel) {
+      recoSection.classList.add("hidden");
+      return;
+    }
+    if (getRemainingMeals().length === 0) {
+      recoSection.classList.add("hidden");
+      return;
+    }
+    if (dashData.remaining_cal < 50) {
+      recoCards.innerHTML = '<div class="reco-card"><div class="reco-body"><strong>You\'re all set!</strong><p>You\'ve met your calorie goal for today.</p></div></div>';
+      recoSection.classList.remove("hidden");
+      return;
+    }
+
+    const hint = (recoHint && recoHint.value.trim()) || "";
+    recoCards.innerHTML = '<div class="empty-state">Thinking...</div>';
+    recoSection.classList.remove("hidden");
+    recoRefresh.disabled = true;
+
+    try {
+      const res = await fetch("/api/llm/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: llmModel,
+          messages: [{ role: "user", content: buildRecoPrompt(hint) }],
+          temperature: 0.7,
+        }),
+      });
+      const data = await res.json();
+      const raw = data.choices?.[0]?.message?.content || "";
+      const suggestions = parseJsonArray(raw);
+      if (suggestions.length) {
+        renderSuggestions(suggestions);
+      } else {
+        recoCards.innerHTML = '<div class="empty-state">No suggestions returned. Try refreshing.</div>';
+      }
+    } catch (e) {
+      recoCards.innerHTML = '<div class="empty-state">Could not reach AI provider.</div>';
+    } finally {
+      recoRefresh.disabled = false;
+    }
+  }
+
+  recoRefresh.addEventListener("click", loadRecommendations);
+  recoHint.addEventListener("keydown", (e) => { if (e.key === "Enter") loadRecommendations(); });
+  loadRecommendations();
+
+  // Dashboard meal delete
+  document.querySelectorAll(".dash-meal-del").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const card = btn.closest(".dash-meal");
+      const id = card.dataset.mealId;
+      if (!confirm("Delete this meal?")) return;
+      try {
+        const res = await fetch("/api/meals/" + id, { method: "DELETE" });
+        if (res.ok) {
+          card.remove();
+          showToast("Meal deleted");
+        } else {
+          showToast("Error deleting meal");
+        }
+      } catch (err) { showToast("Network error"); }
+    });
+  });
+</script>
+{% endblock %}

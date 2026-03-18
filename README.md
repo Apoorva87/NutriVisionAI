@@ -1,36 +1,38 @@
 # NutriSight
 
-NutriSight is a local-first FastAPI web app for photo-based nutrition logging. The current codebase is a working MVP, not just a scaffold. It already supports:
+NutriSight is a local-first FastAPI web app for photo-based nutrition logging with a mobile-first multi-page UI. It supports:
 
-- upload a meal image from desktop or phone browser
-- compress images locally in the browser before upload when supported
-- run a modular analysis pipeline against LM Studio
-- normalize foods against a local nutrition dataset
-- estimate portions with uncertainty
-- review and edit the results before saving
-- store user-specific meals and aggregate daily calories and macros in SQLite
-- custom foods, per-user history, and basic admin catalog tooling
+- scan a meal photo and get AI-detected food items with editable macros
+- manually log foods via search against a 7,800+ item nutrition database
+- save favorite foods for one-tap re-logging
+- review and edit meals after saving (update items, macros, delete)
+- daily dashboard with calorie and macro tracking
+- AI-powered meal recommendations for the rest of the day (Indian vegetarian default)
+- full meal history with trends, grouped by day
+- per-user accounts with persistent device sessions
+- configurable AI provider (LM Studio, Ollama, API, or stub)
 
-The project is being delivered in phases. The continuity log in `docs/EXECUTION_LOG.md` is the handoff record for future Codex sessions, and `docs/ROADMAP.md` tracks the remaining implementation sequence.
+## Pages
 
-Project-maintenance docs:
+The app is organized into focused mobile-first pages with a bottom tab bar:
 
-- `TODO.md` tracks the current backlog
-- `ARCHITECTURE.md` explains the runtime and code structure
-- `SIGNON.md` explains sign-in options and public deployment tradeoffs
-- `docs/EXECUTION_LOG.md` is the session-by-session handoff log
-
-Live static template preview on GitHub Pages:
-
-- [https://apoorva87.github.io/NutriVisionAI/](https://apoorva87.github.io/NutriVisionAI/)
+| Page | Path | Purpose |
+|------|------|---------|
+| Dashboard | `/` | Today's calories/macros, AI meal suggestions, recent meals with delete |
+| Scan | `/analyze` | Photo capture, AI analysis, review items with editable macros |
+| Quick Log | `/log` | Search foods, build meals manually, manage favorites |
+| History | `/history` | Day-grouped meal history, edit/delete saved meals |
+| Settings | `/settings` | Goals, AI provider config, account management |
+| Admin DB | `/admin/db` | Nutrition catalog search/create/update/delete |
+| Admin Users | `/admin/users` | User management |
 
 ## Stack
 
-- FastAPI server
-- Jinja templates + vanilla JavaScript
-- SQLite for meal and nutrition storage
-- LM Studio integration for multimodal analysis
-- Provider interfaces for vision and portion estimation
+- FastAPI + Jinja2 server-rendered templates
+- Vanilla JavaScript with per-page modules (`shared.js`, `analyze.js`, `log.js`)
+- SQLite for meals, nutrition catalog, users, and settings
+- LM Studio integration (OpenAI-compatible API) for vision detection and portion estimation
+- Direct LM Studio calls from browser for meal recommendations (proxied through `/api/llm/chat` to avoid CORS)
 
 ## Run
 
@@ -46,139 +48,114 @@ Then open `http://localhost:8000` from your laptop or `http://<your-lan-ip>:8000
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests -v
+pytest tests/ -v
 ```
 
 Current test coverage includes nutrition math, daily aggregation, endpoint save validation, user-scoped trend helpers, and LM Studio payload parsing.
 
+## Key Features
+
+### Meal Analysis (Scan Page)
+- Camera capture with client-side image compression
+- AI detection via LM Studio with Qwen3-VL
+- Item cards show all macros (P/C/F) and calories
+- Tap macros to edit via popup; changes override auto-calculated values
+- S/M/L portion toggle + grams stepper
+- Change food mapping via full-text search
+- Undo on item removal
+
+### AI Meal Recommendations (Dashboard)
+- Calls LM Studio directly to suggest meals for remaining meal slots
+- Accounts for remaining calories, protein, carbs, and fat
+- Time-aware: breakfast (8am), lunch (12pm), snack (4pm), dinner (7pm)
+- 2 options per meal slot with ingredient weights
+- Indian vegetarian by default; override with keyword input
+- Refresh button to regenerate suggestions
+- Hidden after 9pm (no meals suggested)
+
+### Meal History (History Page)
+- 14-day bar chart and day-grouped meal list
+- Tap to expand meal detail with per-item macros
+- Edit button: inline editing of meal name, grams, calories, and all macros per item
+- Delete items or entire meals
+- Top logged foods section
+
+### Dashboard
+- Dark card with today's calorie/macro summary
+- Quick action buttons (Scan, Quick Log)
+- Recent meals with inline delete
+- AI meal plan section
+
+## API Endpoints
+
+### User-Facing
+- `GET /` — Dashboard
+- `GET /analyze` — Scan meal page
+- `GET /log` — Quick log page
+- `GET /history` — Meal history page
+- `GET /settings` — Settings page
+- `POST /api/analyze` — Upload image and run analysis
+- `POST /api/meals` — Save a meal
+- `GET /api/meals/{id}` — Fetch meal detail
+- `PUT /api/meals/{id}` — Update a saved meal (name, items, macros)
+- `DELETE /api/meals/{id}` — Delete a meal
+- `GET /api/foods` — Search nutrition catalog
+- `POST /api/settings` — Update goals and provider config
+- `POST /api/llm/chat` — Proxy chat requests to LM Studio
+- `POST /custom-foods` — Create a user-owned custom food
+- `POST /custom-foods/{id}/log` — Log a custom food as a meal
+- `POST /custom-foods/{id}/delete` — Delete a custom food
+
+### Admin
+- `GET /admin/db` — Nutrition catalog management
+- `GET /admin/users` — User management
+- `POST /admin/nutrition-items` — Create/update nutrition item
+- `POST /admin/nutrition-items/{id}/delete` — Delete nutrition item
+- `POST /admin/label-import` — Import from nutrition label image
+
 ## GitHub Pages Preview
 
-The repo includes a GitHub Actions workflow that renders static preview versions of the Jinja templates and publishes them to GitHub Pages.
-
-Pages URL:
+Static rendered previews of all pages with sample data:
 
 - [https://apoorva87.github.io/NutriVisionAI/](https://apoorva87.github.io/NutriVisionAI/)
 
 What the preview is:
-
-- a static rendered preview of the real templates
-- sample data injected into the same pages used by the app
-- useful for checking layout and mobile presentation on GitHub
+- static rendered preview of the real templates with sample data
+- useful for checking layout and mobile presentation
 
 What the preview is not:
+- not the live FastAPI app; forms, uploads, and API calls do not work
 
-- it is not the live FastAPI app
-- forms, uploads, database actions, and API calls do not work on GitHub Pages
+How to enable:
+1. Go to repo `Settings` → `Pages`
+2. Set `Source` to `GitHub Actions`
+3. Push to `main` or manually run the `Deploy Template Preview` workflow
 
-How to enable it in GitHub:
+Files:
+- Workflow: `.github/workflows/pages.yml`
+- Renderer: `scripts/render_template_previews.py`
+- Output: `site/`
 
-1. Open the GitHub repo.
-2. Go to `Settings` -> `Pages`.
-3. Under `Build and deployment`, set `Source` to `GitHub Actions`.
-4. Push to `main` or manually run the `Deploy Template Preview` workflow from the `Actions` tab.
-5. Wait for the workflow to finish, then open [https://apoorva87.github.io/NutriVisionAI/](https://apoorva87.github.io/NutriVisionAI/).
+## LM Studio Setup
 
-How it works in this repo:
+1. Start LM Studio on your machine (default: `http://localhost:1234`)
+2. Load a vision-language model (e.g., `qwen/qwen3-vl-8b`)
+3. In NutriSight Settings, choose `lmstudio` as provider and configure the URL and model
+4. Save settings, then scan a meal
 
-- workflow: `.github/workflows/pages.yml`
-- renderer: `scripts/render_template_previews.py`
-- output directory: `site/`
+## Project Docs
 
-## What Is Real vs Stubbed
+- `ARCHITECTURE.md` — Runtime flow, route structure, DB schema, code layout
+- `SIGNON.md` — Auth options and deployment guidance
+- `TODO.md` — Current backlog
+- `docs/EXECUTION_LOG.md` — Session-by-session handoff log
+- `docs/ROADMAP.md` — Implementation sequence
 
-Implemented now:
+## Nutrition Catalog
 
-- image upload and local file storage
-- client-side image compression before upload when browser APIs allow it
-- live LM Studio analysis path over the OpenAI-compatible API
-- food normalization
-- nutrition lookup and total calculation
-- source-backed nutrition catalog tables with importable source metadata
-- structured schemas and provider registry wiring
-- user confirmation and editing flow
-- settings persistence for goals, provider selection, and portion style
-- settings persistence for LM Studio base URL and model identifiers
-- meal history with detail retrieval
-- meal logging and daily dashboard totals
-- user-scoped meal history and a separate trends page at `/history`
-- a simple admin DB portal at `/admin/db` for nutrition catalog search/create/update/delete
-- email-based user registration/session persistence with same-device sign-in reuse
-- per-user custom foods and quick logging without a photo
-- admin users page at `/admin/users`
-- nutrition-label image import into either the master DB or user custom foods
-- logger-side food search endpoint and mobile typeahead against the larger local catalog
-
-The local catalog is now materially populated, not just seeded:
-
-- 7,849 `nutrition_items` rows in the local SQLite DB
-- USDA Foundation + USDA SR Legacy imported into the local catalog
-- Indian seed rows retained with official ICMR-NIN IFCT source metadata
-
-Still stubbed and ready for replacement:
-
-- Ollama and API fallback backends
-- richer production-grade prompt tuning and portion heuristics
-- broader Indian-food ingestion beyond the current seed rows and USDA import
-- stronger auth for public Internet deployments
-
-## Suggested Next Improvements
-
-1. Add personalized food-search ranking and repeat-last-meal shortcuts.
-2. Expand the Indian-food catalog beyond the current seed rows.
-3. Add confidence-threshold states and explicit unknown-food review flows.
-4. Add stronger auth for any deployment exposed outside a trusted LAN.
-5. Keep improving duplicate-item suppression and weight estimation on complex multi-dish plates.
-
-## Nutrition Catalog Import
-
-The local catalog now stores:
-
-- canonical nutrition rows
-- source metadata rows
-- source-item rows for imported USDA or Indian food records
-- alias rows for normalization
-
-The seed file at `data/nutrition_seed.json` uses that structure already. Future source exports should be shaped similarly and passed through `app.db.import_nutrition_catalog(...)`.
-
-The raw USDA and IFCT source files are intentionally not committed to Git because the official USDA payloads exceed GitHub's file-size limits. Recreate the expected local layout with:
+The local catalog stores 7,849 items from USDA Foundation, USDA SR Legacy, and Indian (IFCT) sources. Bootstrap from scratch:
 
 ```bash
 .venv/bin/python scripts/bootstrap_nutrition_sources.py --download --extract --verify
 .venv/bin/python scripts/import_local_catalog.py
 ```
-
-That bootstrap flow recreates the exact paths already expected by the importer:
-
-- `data/imports/usda_foundation_2025_json.zip`
-- `data/imports/usda_sr_legacy_json.zip`
-- `data/imports/ifct_2017_full_copy.pdf`
-- `data/imports/usda_foundation/FoodData_Central_foundation_food_json_2025-12-18.json`
-- `data/imports/usda_sr_legacy/FoodData_Central_sr_legacy_food_json_2018-04.json`
-
-## LM Studio Setup
-
-1. Start the LM Studio local server on your machine, usually at `http://127.0.0.1:1234`.
-2. Load a vision-language model in LM Studio.
-3. In NutriSight settings, choose `lmstudio` as the provider and fill in:
-   - `LM Studio base URL`
-   - `LM Studio vision model`
-   - `LM Studio portion model` (optional; leave blank to reuse the vision model)
-4. Save settings, then analyze a meal.
-
-The current LM Studio integration uses the OpenAI-compatible `POST /v1/chat/completions` path with image input.
-
-For your current deployment, the expected base URL is `http://192.168.0.143:1234`.
-
-## Auth and Deployment
-
-The current app supports lightweight email-based local registration and persistent device sessions for trusted LAN use.
-
-If you want Google sign-in or public Internet access, read:
-
-- `SIGNON.md`
-
-Important constraint: Google Sign-In for web requires HTTPS for production web origins and login endpoints. `localhost` is allowed for local development, but bare LAN HTTP URLs such as `http://192.168.x.x:8000` are not a good production target for Google sign-in.
-
-## Continuity Log
-
-When starting a new Codex session, read `docs/EXECUTION_LOG.md` first. It captures the last verified state, the files that changed, and the next recommended implementation phase. Add a new dated entry at the end of each completed pass so later sessions can resume from the exact state they inherit.

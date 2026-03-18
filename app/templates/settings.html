@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Settings — NutriSight{% endblock %}
+{% block content %}
+{% set s = settings %}
+{% set mg = s.macro_goals | default({}, true) %}
+
+<h1 class="mb-16">Settings</h1>
+
+<!-- Account -->
+<div class="settings-section">
+  <h3>Account</h3>
+  <div class="card">
+    <p><strong>{{ current_user.name }}</strong></p>
+    <p class="small muted">{{ current_user.email }}</p>
+    {% if current_user.is_system %}
+    <form method="post" action="/auth/session" class="stack mt-12">
+      <div class="field-row">
+        <label class="field"><span>Name</span><input type="text" name="name" placeholder="Name" required /></label>
+        <label class="field"><span>Email</span><input type="email" name="email" placeholder="Email" required /></label>
+      </div>
+      <button type="submit">Sign in</button>
+    </form>
+    {% else %}
+    <form method="post" action="/auth/logout" class="mt-12">
+      <button type="submit" class="btn-secondary">Sign out</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Goals -->
+<div class="settings-section">
+  <h3>Daily Goals</h3>
+  <form id="settings-form" class="card stack">
+    <input name="current_user_name" type="hidden" value="{{ current_user.name }}" />
+    <div class="field-row">
+      <label class="field"><span>Calorie goal</span><input name="calorie_goal" type="number" min="1" value="{{ s.calorie_goal | default(2200, true) }}" required /></label>
+      <label class="field"><span>Protein (g)</span><input name="protein_g" type="number" min="1" value="{{ mg.protein_g | default(160, true) }}" required /></label>
+    </div>
+    <div class="field-row">
+      <label class="field"><span>Carbs (g)</span><input name="carbs_g" type="number" min="1" value="{{ mg.carbs_g | default(220, true) }}" required /></label>
+      <label class="field"><span>Fat (g)</span><input name="fat_g" type="number" min="1" value="{{ mg.fat_g | default(70, true) }}" required /></label>
+    </div>
+
+    <h3 class="mt-12">AI Provider</h3>
+    <div class="field-row">
+      <label class="field">
+        <span>Provider</span>
+        <select name="model_provider">
+          <option value="stub" {% if s.model_provider == "stub" %}selected{% endif %}>Stub</option>
+          <option value="lmstudio" {% if s.model_provider == "lmstudio" %}selected{% endif %}>LM Studio</option>
+          <option value="ollama" {% if s.model_provider == "ollama" %}selected{% endif %}>Ollama</option>
+          <option value="api" {% if s.model_provider == "api" %}selected{% endif %}>API</option>
+        </select>
+      </label>
+      <label class="field">
+        <span>Portion style</span>
+        <select name="portion_estimation_style">
+          <option value="grams_with_range" {% if s.portion_estimation_style == "grams_with_range" %}selected{% endif %}>Grams with range</option>
+          <option value="size_labels" {% if s.portion_estimation_style == "size_labels" %}selected{% endif %}>Size labels</option>
+        </select>
+      </label>
+    </div>
+
+    <label class="field"><span>LM Studio URL</span><input name="lmstudio_base_url" type="text" value="{{ s.lmstudio_base_url | default('http://localhost:1234', true) }}" /></label>
+    <div class="field-row">
+      <label class="field"><span>Vision model</span><input name="lmstudio_vision_model" type="text" value="{{ s.lmstudio_vision_model | default('', true) }}" placeholder="qwen/qwen3-vl-8b" /></label>
+      <label class="field"><span>Portion model</span><input name="lmstudio_portion_model" type="text" value="{{ s.lmstudio_portion_model | default('', true) }}" placeholder="(reuse vision)" /></label>
+    </div>
+
+    <button type="submit">Save Settings</button>
+    <p id="settings-status" class="small muted"></p>
+  </form>
+</div>
+
+<!-- Provider status -->
+<div class="settings-section">
+  <h3>Provider Status</h3>
+  <div class="card">
+    <p><span class="status-dot {{ provider_status.lmstudio.status | default('unknown', true) }}"></span><strong>LM Studio</strong> — {{ provider_status.lmstudio.status | default('unknown', true) }}</p>
+    <p class="mt-8"><span class="status-dot {{ provider_status.ollama.status | default('unknown', true) }}"></span><strong>Ollama</strong> — {{ provider_status.ollama.status | default('unknown', true) }}</p>
+  </div>
+</div>
+
+<!-- Admin links -->
+<div class="settings-section">
+  <h3>Admin</h3>
+  <div class="admin-links">
+    <a href="/admin/db">DB Portal</a>
+    <a href="/admin/users">Users</a>
+  </div>
+</div>
+
+{% if message %}
+<div class="status mt-12">{{ message }}</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const form = document.getElementById("settings-form");
+const statusP = document.getElementById("settings-status");
+if (form) {
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    statusP.textContent = "Saving...";
+    try {
+      const res = await fetch("/api/settings", { method: "POST", body: new FormData(form) });
+      const payload = await res.json();
+      if (res.ok) {
+        showToast("Settings saved");
+        statusP.textContent = "";
+      } else {
+        statusP.textContent = payload.error || "Error";
+      }
+    } catch (err) {
+      statusP.textContent = "Network error";
+    }
+  });
+}
+</script>
+{% endblock %}

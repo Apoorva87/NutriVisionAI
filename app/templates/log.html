@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Quick Log — NutriSight{% endblock %}
+{% block content %}
+
+<h1 class="mb-12">Quick Log</h1>
+
+<div class="tab-toggle" id="log-tabs">
+  <button type="button" class="is-active" data-tab="search">Search Foods</button>
+  <button type="button" data-tab="favorites">My Favorites</button>
+</div>
+
+<!-- Search tab -->
+<div id="tab-search">
+  <label class="field mb-12">
+    <input type="text" id="search-input" placeholder="Search rice, paneer, chicken..." inputmode="search" autocomplete="off" />
+  </label>
+
+  <div id="search-results" class="stack-sm"></div>
+
+  <div id="meal-builder" class="hidden mt-16">
+    <h3 class="mb-12">Meal items</h3>
+    <div id="builder-items" class="stack-sm"></div>
+    <div class="field-row mt-12">
+      <label class="field">
+        <span>Meal name</span>
+        <input type="text" id="builder-meal-name" placeholder="Lunch" />
+      </label>
+      <button type="button" id="builder-save" class="mt-12">Save Meal</button>
+    </div>
+  </div>
+</div>
+
+<!-- Favorites tab -->
+<div id="tab-favorites" class="hidden">
+  <div id="fav-list" class="stack-sm">
+    {% for food in custom_foods %}
+    <div class="fav-card" data-fav-id="{{ food.id }}">
+      <div class="fav-body">
+        <strong>{{ food.food_name }}</strong>
+        <p>{{ food.calories | round(0) | int }} kcal / {{ food.serving_grams | round(0) | int }}g &middot; P{{ food.protein_g | round(0) | int }} C{{ food.carbs_g | round(0) | int }} F{{ food.fat_g | round(0) | int }}</p>
+      </div>
+      <div class="fav-actions">
+        <button type="button" class="btn-small fav-log-btn" data-id="{{ food.id }}" data-name="{{ food.food_name }}">Log</button>
+        <button type="button" class="btn-small btn-danger fav-del-btn" data-id="{{ food.id }}">&times;</button>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-state">No favorites yet. Add foods you eat often.</div>
+    {% endfor %}
+  </div>
+
+  <div class="card mt-16">
+    <h3 class="mb-12">Create favorite</h3>
+    <form id="create-fav-form" class="stack">
+      <label class="field"><span>Food name</span><input type="text" name="food_name" required /></label>
+      <div class="field-row">
+        <label class="field"><span>Serving (g)</span><input type="number" name="serving_grams" min="1" step="0.1" required /></label>
+        <label class="field"><span>Calories</span><input type="number" name="calories" min="0" step="0.1" required /></label>
+      </div>
+      <div class="field-row">
+        <label class="field"><span>Protein</span><input type="number" name="protein_g" min="0" step="0.1" required /></label>
+        <label class="field"><span>Carbs</span><input type="number" name="carbs_g" min="0" step="0.1" required /></label>
+        <label class="field"><span>Fat</span><input type="number" name="fat_g" min="0" step="0.1" required /></label>
+      </div>
+      <button type="submit">Save Favorite</button>
+    </form>
+  </div>
+</div>
+
+<!-- Quick log modal -->
+<div id="log-modal" class="search-overlay hidden">
+  <div style="flex:1; display:flex; flex-direction:column; justify-content:center; padding:20px;">
+    <div class="card">
+      <h3 class="mb-12" id="modal-food-name">Food</h3>
+      <div class="stack">
+        <label class="field"><span>Meal name</span><input type="text" id="modal-meal-name" /></label>
+        <label class="field">
+          <span>Servings</span>
+          <div class="stepper">
+            <button type="button" id="modal-minus">&minus;</button>
+            <input type="number" id="modal-servings" value="1" min="0.25" step="0.25" />
+            <button type="button" id="modal-plus">+</button>
+          </div>
+        </label>
+        <div class="field-row">
+          <button type="button" id="modal-confirm">Log Meal</button>
+          <button type="button" id="modal-cancel" class="btn-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/log.js"></script>
+{% endblock %}

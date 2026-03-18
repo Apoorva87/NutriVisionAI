@@ -15,6 +15,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import DATA_DIR, UPLOAD_DIR
 from app.db import (
+    delete_meal,
     delete_nutrition_item,
     delete_custom_food,
     delete_session,
@@ -42,6 +43,7 @@ from app.db import (
     search_nutrition_items_filtered,
     touch_session,
     touch_user,
+    update_meal,
     upsert_custom_food,
     upsert_nutrition_item,
     upsert_user,
@@ -80,52 +82,89 @@ def index(request: Request, message: str = "") -> HTMLResponse:
     today = date.today().isoformat()
     summary = fetch_daily_summary(today, user_name, user_id=current_user["id"])
     dashboard = build_dashboard(summary, settings)
-    recent_meals = fetch_recent_meals(user_name, user_id=current_user["id"])
+    recent_meals = fetch_recent_meals(user_name, limit=5, user_id=current_user["id"])
+    return templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "dashboard": dashboard,
+            "recent_meals": recent_meals,
+            "current_user": current_user,
+            "message": message,
+            "active_tab": "home",
+            "llm_base_url": settings.get("lmstudio_base_url", ""),
+            "llm_model": settings.get("lmstudio_vision_model", "") or settings.get("lmstudio_portion_model", ""),
+            "llm_provider": settings.get("model_provider", "stub"),
+        },
+    )
+
+
+@app.get("/analyze", response_class=HTMLResponse)
+def analyze_page(request: Request) -> HTMLResponse:
+    current_user = resolve_current_user(request)
+    return templates.TemplateResponse(
+        "analyze.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "active_tab": "scan",
+        },
+    )
+
+
+@app.get("/log", response_class=HTMLResponse)
+def log_page(request: Request) -> HTMLResponse:
+    current_user = resolve_current_user(request)
+    return templates.TemplateResponse(
+        "log.html",
+        {
+            "request": request,
+            "current_user": current_user,
+            "custom_foods": list_custom_foods(current_user["id"], limit=50),
+            "active_tab": "log",
+        },
+    )
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request, message: str = "") -> HTMLResponse:
+    settings = fetch_settings()
+    current_user = resolve_current_user(request)
     provider_bundle = build_provider_bundle()
     provider_status = {
         "selected": provider_bundle["provider_name"],
         "ollama": probe_remote_health("http://127.0.0.1:11434/api/tags"),
         "lmstudio": probe_remote_health("{0}/v1/models".format(provider_bundle["lmstudio_base_url"])),
     }
-    selected_meal = recent_meals[0]["id"] if recent_meals else None
-    meal_detail = fetch_meal_detail(int(selected_meal), user_name, user_id=current_user["id"]) if selected_meal else None
     return templates.TemplateResponse(
-        "index.html",
+        "settings.html",
         {
             "request": request,
-            "dashboard": dashboard,
-            "recent_meals": recent_meals,
-            "meal_detail": meal_detail,
-            "available_foods": [item["canonical_name"] for item in fetch_quick_nutrition_choices(limit=150)],
-            "custom_foods": list_custom_foods(current_user["id"], limit=50),
-            "current_user": current_user,
-            "message": message,
-            "provider_status": provider_status,
             "settings": settings,
-            "today": today,
-            "user_name": user_name,
+            "current_user": current_user,
+            "provider_status": provider_status,
+            "message": message,
+            "active_tab": "settings",
         },
     )
 
 
 @app.get("/history", response_class=HTMLResponse)
 def history(request: Request) -> HTMLResponse:
-    settings = fetch_settings()
     current_user = resolve_current_user(request)
     user_name = current_user["name"]
-    trends = fetch_daily_trends(user_name, days=21, user_id=current_user["id"])
-    grouped_meals = fetch_meals_grouped_by_day(user_name, days=21, user_id=current_user["id"])
+    trends = fetch_daily_trends(user_name, days=14, user_id=current_user["id"])
+    grouped_meals = fetch_meals_grouped_by_day(user_name, days=14, user_id=current_user["id"])
     top_foods = fetch_top_foods(user_name, limit=10, user_id=current_user["id"])
     return templates.TemplateResponse(
-        "history.html",
+        "history_new.html",
         {
             "request": request,
-            "settings": settings,
-            "user_name": user_name,
             "current_user": current_user,
             "trends": list(reversed(trends)),
             "grouped_meals": grouped_meals,
             "top_foods": top_foods,
+            "active_tab": "history",
         },
     )
 
@@ -355,6 +394,49 @@ async def meal_detail(request: Request, meal_id: int) -> JSONResponse:
     return JSONResponse(meal)
 
 
+@app.delete("/api/meals/{meal_id}")
+async def delete_meal_endpoint(request: Request, meal_id: int) -> JSONResponse:
+    current_user = resolve_current_user(request)
+    deleted = delete_meal(meal_id, current_user["id"])
+    if not deleted:
+        return JSONResponse({"error": "Meal not found."}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+@app.put("/api/meals/{meal_id}")
+async def update_meal_endpoint(request: Request, meal_id: int) -> JSONResponse:
+    current_user = resolve_current_user(request)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body."}, status_code=400)
+    updates: Dict[str, Any] = {}
+    if "meal_name" in body:
+        updates["meal_name"] = str(body["meal_name"]).strip() or "Meal"
+    if "items" in body and isinstance(body["items"], list):
+        updates["items"] = [
+            {
+                "detected_name": str(it.get("detected_name", it.get("canonical_name", ""))),
+                "canonical_name": str(it.get("canonical_name", "")),
+                "portion_label": str(it.get("portion_label", "medium")),
+                "estimated_grams": float(it.get("estimated_grams", 0)),
+                "uncertainty": str(it.get("uncertainty", "")),
+                "confidence": float(it.get("confidence", 1)),
+                "calories": float(it.get("calories", 0)),
+                "protein_g": float(it.get("protein_g", 0)),
+                "carbs_g": float(it.get("carbs_g", 0)),
+                "fat_g": float(it.get("fat_g", 0)),
+            }
+            for it in body["items"]
+        ]
+    if not updates:
+        return JSONResponse({"error": "Nothing to update."}, status_code=400)
+    result = update_meal(meal_id, current_user["id"], updates)
+    if not result:
+        return JSONResponse({"error": "Meal not found."}, status_code=404)
+    return JSONResponse(result)
+
+
 @app.get("/api/foods")
 async def food_search(q: str = "", limit: int = 15) -> JSONResponse:
     query = q.strip()
@@ -423,6 +505,24 @@ async def save_settings(
     current_user = resolve_current_user(request)
     dashboard = build_dashboard(fetch_daily_summary(date.today().isoformat(), current_user["name"], user_id=current_user["id"]), settings)
     return JSONResponse({"settings": settings, "dashboard": dashboard})
+
+
+@app.post("/api/llm/chat")
+async def llm_chat_proxy(request: Request) -> JSONResponse:
+    """Proxy chat requests to LM Studio to avoid browser CORS issues."""
+    settings = fetch_settings()
+    base_url = settings.get("lmstudio_base_url", "http://localhost:1234").rstrip("/")
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON."}, status_code=400)
+    try:
+        from app.services import LMStudioClient
+        client = LMStudioClient(base_url, timeout_seconds=30.0)
+        result = client._post_json("/v1/chat/completions", body)
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
 
 
 @app.post("/auth/session")

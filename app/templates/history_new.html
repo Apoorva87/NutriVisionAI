@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}History — NutriSight{% endblock %}
+{% block content %}
+
+<h1 class="mb-12">History</h1>
+
+{% if trends %}
+<div class="mini-chart" id="mini-chart">
+  {% set max_cal = trends | map(attribute='calories') | max %}
+  {% for t in trends %}
+  <div class="mini-chart-bar{% if loop.last %} is-today{% endif %}" style="height: {{ (t.calories / max_cal * 100) if max_cal > 0 else 4 }}%">
+    <span class="mini-chart-label">{{ t.day[-5:] }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% for group in grouped_meals %}
+<div class="day-group">
+  <div class="day-header">
+    <strong>{{ group.day }}</strong>
+    <span>{{ group.summary.calories | round(0) | int }} kcal &middot; {{ group.summary.meal_count }} meal{{ 's' if group.summary.meal_count != 1 else '' }}</span>
+  </div>
+  {% for meal in group.meals %}
+  <div class="card-compact meal-row" data-meal-id="{{ meal.id }}" style="cursor:pointer;">
+    <div class="card-body">
+      <strong>{{ meal.meal_name }}</strong>
+      <p>{{ meal.created_at[-8:-3] if meal.created_at | length > 8 else meal.created_at }}</p>
+    </div>
+    <div class="card-end">{{ meal.total_calories | round(0) | int }} kcal</div>
+  </div>
+  <div class="meal-detail hidden" id="detail-{{ meal.id }}"></div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">No meals logged yet.</div>
+{% endfor %}
+
+{% if top_foods %}
+<h2 class="mt-16">Most logged foods</h2>
+{% for food in top_foods[:5] %}
+<div class="card-compact">
+  <div class="card-body">
+    <strong>{{ food.canonical_name }}</strong>
+    <p>Logged {{ food.item_count }} time{{ 's' if food.item_count != 1 else '' }}</p>
+  </div>
+  <div class="card-end">{{ food.total_calories | round(0) | int }} kcal total</div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── Meal detail: view / edit / delete ────────────────────── */
+const mealCache = {};
+
+document.querySelectorAll(".meal-row").forEach((row) => {
+  row.addEventListener("click", async () => {
+    const id = row.dataset.mealId;
+    const detail = document.getElementById("detail-" + id);
+    if (!detail) return;
+
+    if (!detail.classList.contains("hidden")) {
+      detail.classList.add("hidden");
+      return;
+    }
+
+    if (!detail.dataset.loaded) {
+      detail.innerHTML = '<div class="empty-state">Loading...</div>';
+      detail.classList.remove("hidden");
+      try {
+        const res = await fetch("/api/meals/" + id);
+        const meal = await res.json();
+        if (!res.ok) { detail.innerHTML = '<div class="empty-state">Error loading</div>'; return; }
+        mealCache[id] = meal;
+        renderMealDetail(id, meal, detail);
+        detail.dataset.loaded = "true";
+      } catch (err) {
+        detail.innerHTML = '<div class="empty-state">Network error</div>';
+      }
+    } else {
+      detail.classList.remove("hidden");
+    }
+  });
+});
+
+function renderMealDetail(id, meal, detail) {
+  const items = meal.items || [];
+  detail.innerHTML = `
+    <div class="meal-detail-stats">
+      <div><span>Protein</span><strong>${safeNumber(meal.total_protein_g).toFixed(0)}g</strong></div>
+      <div><span>Carbs</span><strong>${safeNumber(meal.total_carbs_g).toFixed(0)}g</strong></div>
+      <div><span>Fat</span><strong>${safeNumber(meal.total_fat_g).toFixed(0)}g</strong></div>
+    </div>
+    ${items.map((it, i) => `
+      <div class="detail-item">
+        <div><strong>${escapeHtml(it.canonical_name)}</strong>${it.detected_name && it.detected_name !== it.canonical_name ? ` <span class="small muted">(${escapeHtml(it.detected_name)})</span>` : ""}</div>
+        <div class="detail-item-right">${safeNumber(it.estimated_grams).toFixed(0)}g &middot; ${safeNumber(it.calories).toFixed(0)} kcal<br><span class="small muted">P${safeNumber(it.protein_g).toFixed(0)} C${safeNumber(it.carbs_g).toFixed(0)} F${safeNumber(it.fat_g).toFixed(0)}</span></div>
+      </div>
+    `).join("")}
+    <div class="detail-actions">
+      <button type="button" class="btn-secondary btn-small" onclick="startEditMeal(${id})">Edit</button>
+      <button type="button" class="btn-danger btn-small" onclick="deleteMeal(${id})">Delete</button>
+    </div>
+  `;
+}
+
+/* ── Edit mode ───────────────────────────────────────────── */
+function startEditMeal(id) {
+  const meal = mealCache[id];
+  if (!meal) return;
+  const detail = document.getElementById("detail-" + id);
+  if (!detail) return;
+  const items = meal.items || [];
+  const row = document.querySelector('[data-meal-id="' + id + '"]');
+  const mealName = meal.meal_name || "Meal";
+
+  detail.innerHTML = `
+    <div class="edit-meal-form" data-edit-id="${id}">
+      <label class="field mb-8"><span>Meal name</span><input type="text" class="edit-meal-name" value="${escapeHtml(mealName)}" /></label>
+      <div class="edit-items-list">
+        ${items.map((it, i) => `
+          <div class="edit-item" data-idx="${i}">
+            <div class="edit-item-header">
+              <strong>${escapeHtml(it.canonical_name)}</strong>
+              <button type="button" class="btn-icon btn-danger btn-small edit-item-remove" data-idx="${i}" title="Remove">&times;</button>
+            </div>
+            <div class="edit-fields-grid">
+              <label class="field"><span>Grams</span><input type="number" class="edit-grams" value="${safeNumber(it.estimated_grams).toFixed(0)}" min="0" step="1" /></label>
+              <label class="field"><span>Cal</span><input type="number" class="edit-cal" value="${safeNumber(it.calories).toFixed(0)}" min="0" step="1" /></label>
+              <label class="field"><span>P</span><input type="number" class="edit-p" value="${safeNumber(it.protein_g).toFixed(0)}" min="0" step="0.1" /></label>
+              <label class="field"><span>C</span><input type="number" class="edit-c" value="${safeNumber(it.carbs_g).toFixed(0)}" min="0" step="0.1" /></label>
+              <label class="field"><span>F</span><input type="number" class="edit-f" value="${safeNumber(it.fat_g).toFixed(0)}" min="0" step="0.1" /></label>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+      <div class="detail-actions mt-8">
+        <button type="button" class="btn-small" onclick="saveEditMeal(${id})">Save</button>
+        <button type="button" class="btn-secondary btn-small" onclick="cancelEditMeal(${id})">Cancel</button>
+      </div>
+    </div>
+  `;
+
+  // Wire remove buttons
+  detail.querySelectorAll(".edit-item-remove").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      btn.closest(".edit-item").remove();
+    });
+  });
+}
+
+async function saveEditMeal(id) {
+  const detail = document.getElementById("detail-" + id);
+  const form = detail.querySelector(".edit-meal-form");
+  const mealName = form.querySelector(".edit-meal-name").value.trim() || "Meal";
+  const editItems = form.querySelectorAll(".edit-item");
+  const original = mealCache[id];
+  const origItems = original.items || [];
+
+  const items = [];
+  editItems.forEach((el) => {
+    const idx = Number(el.dataset.idx);
+    const orig = origItems[idx] || {};
+    items.push({
+      detected_name: orig.detected_name || orig.canonical_name || "",
+      canonical_name: orig.canonical_name || "",
+      portion_label: orig.portion_label || "medium",
+      estimated_grams: safeNumber(el.querySelector(".edit-grams").value),
+      uncertainty: orig.uncertainty || "",
+      confidence: safeNumber(orig.confidence, 1),
+      calories: safeNumber(el.querySelector(".edit-cal").value),
+      protein_g: safeNumber(el.querySelector(".edit-p").value),
+      carbs_g: safeNumber(el.querySelector(".edit-c").value),
+      fat_g: safeNumber(el.querySelector(".edit-f").value),
+    });
+  });
+
+  try {
+    const res = await fetch("/api/meals/" + id, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ meal_name: mealName, items }),
+    });
+    if (!res.ok) { showToast("Error saving"); return; }
+    const updated = await res.json();
+    mealCache[id] = updated;
+    renderMealDetail(id, updated, detail);
+    // Update the row summary
+    const row = document.querySelector('[data-meal-id="' + id + '"]');
+    if (row) {
+      row.querySelector(".card-body strong").textContent = updated.meal_name;
+      row.querySelector(".card-end").textContent = Math.round(safeNumber(updated.total_calories)) + " kcal";
+    }
+    showToast("Meal updated");
+  } catch (err) {
+    showToast("Network error");
+  }
+}
+
+function cancelEditMeal(id) {
+  const meal = mealCache[id];
+  const detail = document.getElementById("detail-" + id);
+  if (meal && detail) renderMealDetail(id, meal, detail);
+}
+
+/* ── Delete ───────────────────────────────────────────────── */
+async function deleteMeal(id) {
+  if (!confirm("Delete this meal? This cannot be undone.")) return;
+  try {
+    const res = await fetch("/api/meals/" + id, { method: "DELETE" });
+    if (res.ok) {
+      const row = document.querySelector('[data-meal-id="' + id + '"]');
+      const detail = document.getElementById("detail-" + id);
+      if (row) row.remove();
+      if (detail) detail.remove();
+      showToast("Meal deleted");
+    } else {
+      showToast("Error deleting meal");
+    }
+  } catch (err) {
+    showToast("Network error");
+  }
+}
+</script>
+{% endblock %}

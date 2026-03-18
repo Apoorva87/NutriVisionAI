@@ -758,3 +758,67 @@ This file is the continuity log for future Codex sessions. Update it at the end 
 1. Verify the deployed GitHub Pages preview after the workflow runs.
 2. Add personalized food-search ranking and repeat-last-meal shortcuts.
 3. Tighten admin protection before any public deployment.
+
+## 2026-03-17 Session 21
+
+### Scope
+
+- complete UI redesign: split monolithic single-page app into multi-page mobile-first layout
+- added bottom tab bar navigation (Home, Log, Scan, History, Settings)
+- created per-page JS modules: `shared.js`, `analyze.js`, `log.js`
+- redesigned all CSS from scratch for mobile-first with system font stack
+
+### Files Added
+
+- `app/templates/base.html` — shared layout with bottom tab bar
+- `app/templates/dashboard.html` — home page
+- `app/templates/analyze.html` — scan meal page with macro edit modal
+- `app/templates/log.html` — quick log with search, favorites, meal builder
+- `app/templates/history_new.html` — history with edit/delete
+- `app/templates/settings.html` — goals, provider config, account
+- `app/static/shared.js` — common utilities
+- `app/static/analyze.js` — analyze page logic
+- `app/static/log.js` — log page logic
+
+### Files Updated
+
+- `app/main.py` — new page routes, PUT/DELETE meal endpoints, LLM chat proxy
+- `app/services.py` — chat_text method, parse_json_array, balanced JSON extraction
+- `app/db.py` — delete_meal, update_meal, relevance-ranked search
+- `app/static/styles.css` — complete rewrite for mobile-first design
+- `app/schemas.py` — localhost default for LM Studio URL
+- `scripts/render_template_previews.py` — renders all new pages
+- `README.md` — comprehensive rewrite
+- `ARCHITECTURE.md` — updated for multi-page architecture
+- `TODO.md` — refreshed backlog
+
+### Key Features Added
+
+1. **Multi-page mobile UI** with bottom tab bar (5 tabs)
+2. **Macro display on item cards** — P/C/F shown below calories on analyzed items
+3. **Macro edit popup** — tap to override auto-calculated macros per item
+4. **Grams label** on stepper controls
+5. **Meal edit** — PUT /api/meals/{id} endpoint + inline editing in history page
+6. **Meal delete** — on both dashboard (inline) and history page
+7. **AI meal recommendations** — LLM-powered suggestions on dashboard:
+   - Time-aware meal slots (breakfast 8am, lunch 12pm, snack 4pm, dinner 7pm)
+   - Accounts for remaining calories, protein, carbs, fat
+   - 2 options per meal slot with ingredient weights
+   - Indian vegetarian default, keyword override
+   - Refresh button, hidden after 9pm
+   - Proxied through /api/llm/chat to avoid CORS
+8. **Food search improvements** — relevance-ranked (exact > prefix > substring)
+9. **Client-side nutrition sync** — per-serving data in analysis responses
+
+### Verification
+
+- `pytest tests/ -v` — 20 tests passed
+- Template preview renderer generates all 7 pages successfully
+- Live server tested at http://localhost:8000
+
+### Next Recommended Phase
+
+1. Test the full mobile flow on a real phone.
+2. Expand Indian food catalog coverage.
+3. Add meal cloning / repeat-last-meal shortcuts.
+4. Add admin route authentication.

@@ -162,6 +162,19 @@ class LMStudioClient:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
 
+    def chat_text(self, model: str, prompt: str) -> str:
+        """Send a text-only prompt and return the raw text response."""
+        request_payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.7,
+        }
+        response_payload = self._post_json("/v1/chat/completions", request_payload)
+        try:
+            return response_payload["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RemoteProviderUnavailable("LM Studio returned an unexpected response shape.") from exc
+
     def chat_json(self, model: str, prompt: str, image_path: Optional[Path] = None) -> Dict[str, object]:
         content: List[Dict[str, object]] = [{"type": "text", "text": prompt}]
         if image_path is not None:
@@ -211,6 +224,55 @@ def image_file_to_data_url(image_path: Path) -> str:
     mime_type = mimetypes.guess_type(image_path.name)[0] or "image/jpeg"
     encoded = b64encode(image_path.read_bytes()).decode("ascii")
     return "data:{0};base64,{1}".format(mime_type, encoded)
+
+
+def parse_json_array(text: object) -> List[Dict[str, object]]:
+    """Extract a JSON array from LLM response text."""
+    if isinstance(text, list):
+        text = "".join(str(part) for part in text)
+    if not isinstance(text, str):
+        return []
+    stripped = text.strip()
+    # Try direct parse
+    try:
+        result = json.loads(stripped)
+        if isinstance(result, list):
+            return result
+    except json.JSONDecodeError:
+        pass
+    # Find first [ and matching ]
+    start = stripped.find("[")
+    if start == -1:
+        return []
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(stripped)):
+        ch = stripped[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+            if depth == 0:
+                try:
+                    result = json.loads(stripped[start:i + 1])
+                    if isinstance(result, list):
+                        return result
+                except json.JSONDecodeError:
+                    pass
+                break
+    return []
 
 
 def parse_json_object(text: object) -> Dict[str, object]:
