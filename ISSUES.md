@@ -21,6 +21,13 @@ Code review performed on 2026-03-17.
 - [x] **#16 `on_startup` uses deprecated FastAPI event syntax** — Migrated from `@app.on_event("startup")` to `lifespan` async context manager.
 - [x] **#17 No email validation** — Added regex-based email format validation to `AuthPayload` via `@field_validator`. Invalid emails now return a redirect with error message instead of a 500.
 
+## Fixed (2026-03-18) — AI & UI
+
+- [x] **#20 Default provider was `stub`** — Changed default `model_provider` from `stub` to `lmstudio` with migration for existing databases. AI suggestions section now always visible with clear "unavailable" message when provider not reachable.
+- [x] **#21 Admin templates unstyled** — `admin_db.html` and `admin_users.html` rewrote to extend `base.html` with proper inline scoped styles, admin nav bar, and responsive layouts.
+- [x] **#22 AI Food Lookup feature** — New centered modal on Quick Log page. LLM estimates nutrition for any food/dish, optional DuckDuckGo web search for second opinion. Edit button to customize name and macros before saving to DB. Endpoints: `POST /api/ai-food-lookup`, `POST /api/ai-food-lookup/save`.
+- [x] **#23 Browser caching stale JS/CSS** — Added `?v=N` cache-busting query strings to all static file references in `base.html` and `log.html`.
+
 ## Open — Security
 
 - [ ] **#5 No CSRF protection** — All POST endpoints accept form data without CSRF tokens. `samesite="lax"` helps but doesn't fully protect against cross-origin form POSTs. See `ISSUE_CSRF.md` for detailed analysis and implementation options.

@@ -4,6 +4,8 @@ NutriSight is a local-first FastAPI web app for photo-based nutrition logging wi
 
 - scan a meal photo and get AI-detected food items with editable macros
 - manually log foods via search against a 7,800+ item nutrition database
+- AI food lookup: get nutrition estimates for any food via LLM, with optional web search
+- edit AI estimates (name, macros) and save to the database for future use
 - save favorite foods for one-tap re-logging
 - review and edit meals after saving (update items, macros, delete)
 - daily dashboard with calorie and macro tracking
@@ -20,7 +22,7 @@ The app is organized into focused mobile-first pages with a bottom tab bar:
 |------|------|---------|
 | Dashboard | `/` | Today's calories/macros, AI meal suggestions, recent meals with delete |
 | Scan | `/analyze` | Photo capture, AI analysis, review items with editable macros |
-| Quick Log | `/log` | Search foods, build meals manually, manage favorites |
+| Quick Log | `/log` | Search foods, AI food lookup, build meals manually, manage favorites |
 | History | `/history` | Day-grouped meal history, edit/delete saved meals |
 | Settings | `/settings` | Goals, AI provider config, account management |
 | Admin DB | `/admin/db` | Nutrition catalog search/create/update/delete |
@@ -40,6 +42,11 @@ The app is organized into focused mobile-first pages with a bottom tab bar:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
+# Quick start (kills any existing server on port 8000 and restarts)
+./host.sh
+
+# Or manually
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -51,7 +58,12 @@ Then open `http://localhost:8000` from your laptop or `http://<your-lan-ip>:8000
 pytest tests/ -v
 ```
 
-Current test coverage includes nutrition math, daily aggregation, endpoint save validation, user-scoped trend helpers, and LM Studio payload parsing.
+57 tests covering:
+- Nutrition math, daily aggregation, and user-scoped trend helpers
+- API endpoint validation (save meals, search, admin CRUD, LLM proxy)
+- AI food lookup (input validation, LLM estimation, DB persistence)
+- LM Studio payload parsing and service integration
+- **Playwright UI tests** for the AI Help modal (visibility, interaction, edit flow, save-to-DB integration)
 
 ## Key Features
 
@@ -74,6 +86,16 @@ Current test coverage includes nutrition math, daily aggregation, endpoint save 
 - Indian vegetarian by default; override with keyword input
 - Refresh button to regenerate suggestions
 - Hidden after 9pm (no meals suggested)
+
+### AI Food Lookup (Quick Log Page)
+- Floating "AI Help" button opens a centered modal
+- Type any food or dish name to get AI-estimated nutrition (calories, protein, carbs, fat)
+- Optional web search toggle queries DuckDuckGo for a second data point
+- Edit button lets you customize the food name and all macro values before saving
+- "Use in meal" adds the item (original or edited) to the meal builder
+- "Save to DB" persists to the nutrition database so it's searchable next time
+- Refresh button re-runs the lookup
+- Input validated against injection attacks (regex whitelist, max 200 chars)
 
 ### Meal History (History Page)
 - 14-day bar chart and day-grouped meal list
@@ -105,6 +127,8 @@ Current test coverage includes nutrition math, daily aggregation, endpoint save 
 - `GET /api/foods` — Search nutrition catalog
 - `POST /api/settings` — Update goals and provider config
 - `POST /api/llm/chat` — Proxy chat requests to LM Studio
+- `POST /api/ai-food-lookup` — AI-powered nutrition estimation for any food (with optional web search)
+- `POST /api/ai-food-lookup/save` — Save an AI-looked-up food to the nutrition database
 - `POST /custom-foods` — Create a user-owned custom food
 - `POST /custom-foods/{id}/log` — Log a custom food as a meal
 - `POST /custom-foods/{id}/delete` — Delete a custom food
