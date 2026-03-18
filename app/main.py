@@ -23,6 +23,7 @@ from app.db import (
     fetch_meal_detail,
     fetch_meals_grouped_by_day,
     fetch_custom_food,
+    fetch_nutrition_item,
     fetch_nutrition_item_by_id,
     fetch_nutrition_sources,
     fetch_quick_nutrition_choices,
@@ -244,10 +245,21 @@ async def analyze_image(image: UploadFile = File(...)) -> JSONResponse:
     except RemoteProviderUnavailable as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
 
+    items_payload = []
+    for item in analysis.items:
+        item_dict = item.model_dump()
+        db_item = fetch_nutrition_item(item.canonical_name)
+        if db_item:
+            item_dict["serving_grams"] = float(db_item["serving_grams"])
+            item_dict["per_serving_calories"] = float(db_item["calories"])
+            item_dict["per_serving_protein_g"] = float(db_item["protein_g"])
+            item_dict["per_serving_carbs_g"] = float(db_item["carbs_g"])
+            item_dict["per_serving_fat_g"] = float(db_item["fat_g"])
+        items_payload.append(item_dict)
     return JSONResponse(
         {
             "image_path": "/uploads/{0}".format(filename),
-            "items": [item.model_dump() for item in analysis.items],
+            "items": items_payload,
             "totals": analysis.totals.model_dump(),
             "provider_metadata": analysis.provider_metadata,
         }
@@ -272,7 +284,12 @@ async def save_meal(
     settings = fetch_settings()
     current_user = resolve_current_user(request)
     user_name = current_user["name"]
-    raw_items = json.loads(items_json)
+    try:
+        raw_items = json.loads(items_json)
+    except (json.JSONDecodeError, TypeError):
+        return JSONResponse({"error": "Invalid items JSON."}, status_code=400)
+    if not isinstance(raw_items, list):
+        return JSONResponse({"error": "Items must be a list."}, status_code=400)
     items = []
     unresolved_items = []
     for item in raw_items:
@@ -370,7 +387,7 @@ async def save_settings(
     fat_g: int = Form(...),
     model_provider: str = Form(...),
     portion_estimation_style: str = Form(...),
-    lmstudio_base_url: str = Form("http://192.168.0.143:1234"),
+    lmstudio_base_url: str = Form("http://localhost:1234"),
     lmstudio_vision_model: str = Form(""),
     lmstudio_portion_model: str = Form(""),
 ) -> JSONResponse:

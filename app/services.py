@@ -4,7 +4,7 @@ import urllib.error
 import urllib.request
 from base64 import b64encode
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from app.db import fetch_settings
 from app.providers.llm import PortionEstimator, StubPortionEstimator
@@ -14,6 +14,7 @@ from app.schemas import (
     AnalysisItem,
     AnalysisResult,
     Detection,
+    NutritionTotals,
     PortionEstimate,
 )
 
@@ -221,14 +222,42 @@ def parse_json_object(text: object) -> Dict[str, object]:
     try:
         return json.loads(stripped)
     except json.JSONDecodeError:
-        start = stripped.find("{")
-        end = stripped.rfind("}")
-        if start == -1 or end == -1 or end <= start:
+        candidate = _extract_balanced_json(stripped)
+        if candidate is None:
             raise RemoteProviderUnavailable("LM Studio response did not contain valid JSON.")
         try:
-            return json.loads(stripped[start : end + 1])
+            return json.loads(candidate)
         except json.JSONDecodeError as exc:
             raise RemoteProviderUnavailable("LM Studio response contained invalid JSON.") from exc
+
+
+def _extract_balanced_json(text: str) -> Optional[str]:
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
 
 
 def extract_list_payload(payload: Dict[str, object]) -> List[Dict[str, object]]:
@@ -275,7 +304,7 @@ def build_provider_bundle() -> Dict[str, object]:
     provider_name = settings.get("model_provider", "stub")
     vision_provider: VisionProvider = StubVisionProvider()
     portion_estimator: PortionEstimator = StubPortionEstimator()
-    lmstudio_base_url = str(settings.get("lmstudio_base_url", "http://192.168.0.143:1234")).rstrip("/")
+    lmstudio_base_url = str(settings.get("lmstudio_base_url", "http://localhost:1234")).rstrip("/")
     lmstudio_vision_model = str(settings.get("lmstudio_vision_model", ""))
     lmstudio_portion_model = str(settings.get("lmstudio_portion_model", ""))
 
@@ -423,7 +452,7 @@ def run_analysis(image_path: Path) -> AnalysisResult:
         return AnalysisResult(
             image_path=str(image_path),
             items=[],
-            totals={"calories": 0.0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0},
+            totals=NutritionTotals(calories=0.0, protein_g=0.0, carbs_g=0.0, fat_g=0.0),
             provider_metadata={
                 "model_provider": str(bundle["provider_name"]),
                 "portion_estimation_style": str(bundle["portion_style"]),
@@ -488,13 +517,13 @@ def run_analysis(image_path: Path) -> AnalysisResult:
     )
 
 
-def summarize_items(items: List[AnalysisItem]) -> Dict[str, float]:
+def summarize_items(items: List[AnalysisItem]) -> NutritionTotals:
     totals = {"calories": 0.0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0}
     for item in items:
         payload = item.model_dump()
         for key in totals:
             totals[key] += float(payload[key])
-    return {key: round(value, 1) for key, value in totals.items()}
+    return NutritionTotals(**{key: round(value, 1) for key, value in totals.items()})
 
 
 def probe_remote_health(url: str) -> Dict[str, str]:

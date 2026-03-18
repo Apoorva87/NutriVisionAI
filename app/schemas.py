@@ -60,7 +60,7 @@ class SettingsPayload(BaseModel):
     fat_g: int = Field(gt=0, le=1000)
     model_provider: str
     portion_estimation_style: str
-    lmstudio_base_url: str = "http://192.168.0.143:1234"
+    lmstudio_base_url: str = "http://localhost:1234"
     lmstudio_vision_model: str = "qwen/qwen3-vl-8b"
     lmstudio_portion_model: str = "qwen/qwen3-vl-8b"
 

@@ -335,7 +335,7 @@
         <div class="settings-form-grid settings-form-grid-wide">
           <label class="field">
             <span>LM Studio base URL</span>
-            <input name="lmstudio_base_url" type="text" value="{{ app_settings.lmstudio_base_url | default('http://192.168.0.143:1234', true) }}" />
+            <input name="lmstudio_base_url" type="text" value="{{ app_settings.lmstudio_base_url | default('http://localhost:1234', true) }}" />
           </label>
           <label class="field">
             <span>LM Studio vision model</span>
@@ -369,7 +369,7 @@
         </article>
         <article class="setting-card">
           <span>LM Studio URL</span>
-          <strong>{{ app_settings.lmstudio_base_url | default('http://192.168.0.143:1234', true) }}</strong>
+          <strong>{{ app_settings.lmstudio_base_url | default('http://localhost:1234', true) }}</strong>
         </article>
         <article class="setting-card">
           <span>Vision model</span>

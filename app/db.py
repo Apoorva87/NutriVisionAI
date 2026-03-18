@@ -156,7 +156,7 @@ def init_db(seed_path: Path) -> None:
         "current_user_name": "default",
         "model_provider": "stub",
         "portion_estimation_style": "grams_with_range",
-        "lmstudio_base_url": "http://192.168.0.143:1234",
+        "lmstudio_base_url": "http://localhost:1234",
         "lmstudio_vision_model": "qwen/qwen3-vl-8b",
         "lmstudio_portion_model": "qwen/qwen3-vl-8b",
     }
@@ -496,17 +496,26 @@ def search_nutrition_items() -> List[Dict[str, Any]]:
 def search_nutrition_items_filtered(query: str = "", limit: int = 50) -> List[Dict[str, Any]]:
     conn = get_connection()
     if query.strip():
-        wildcard = "%{0}%".format(query.strip().lower())
+        lowered = query.strip().lower()
+        wildcard = "%{0}%".format(lowered)
+        prefix = "{0}%".format(lowered)
         rows = conn.execute(
             """
-            SELECT * FROM nutrition_items
+            SELECT *,
+                CASE
+                    WHEN lower(canonical_name) = ? THEN 0
+                    WHEN lower(canonical_name) LIKE ? THEN 1
+                    WHEN lower(canonical_name) LIKE ? THEN 2
+                    ELSE 3
+                END AS relevance
+            FROM nutrition_items
             WHERE lower(canonical_name) LIKE ?
                OR lower(COALESCE(source_label, '')) LIKE ?
                OR lower(COALESCE(primary_source_key, '')) LIKE ?
-            ORDER BY canonical_name
+            ORDER BY relevance, LENGTH(canonical_name), canonical_name
             LIMIT ?
             """,
-            (wildcard, wildcard, wildcard, limit),
+            (lowered, prefix, wildcard, wildcard, wildcard, wildcard, limit),
         ).fetchall()
     else:
         rows = conn.execute(

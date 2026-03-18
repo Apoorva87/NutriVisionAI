@@ -444,7 +444,7 @@ function renderSettings() {
   const calorieGoal = settings.calorie_goal ?? 2200;
   const provider = settings.model_provider || "stub";
   const portionStyle = settings.portion_estimation_style || "grams_with_range";
-  const lmstudioBaseUrl = settings.lmstudio_base_url || "http://192.168.0.143:1234";
+  const lmstudioBaseUrl = settings.lmstudio_base_url || "http://localhost:1234";
   const lmstudioVisionModel = settings.lmstudio_vision_model || "not set";
   const lmstudioPortionModel = settings.lmstudio_portion_model || "reuse vision model";
 
@@ -676,7 +676,7 @@ async function compressImage(file) {
 }
 
 function collectItemsFromForm() {
-  return [...document.querySelectorAll(".result-card")].map((card) => {
+  return [...document.querySelectorAll(".result-card")].filter((card) => !card.dataset.removed).map((card) => {
     const canonicalName = card.querySelector("[name='canonical_name']").value.trim().toLowerCase();
     const detectedName = card.querySelector("[name='detected_name']").value.trim();
     const grams = safeNumber(card.querySelector("[name='estimated_grams']").value);
@@ -788,8 +788,27 @@ function bindEditors() {
     const removeButton = card.querySelector(".remove-item");
     if (removeButton) {
       removeButton.addEventListener("click", () => {
-        card.remove();
+        card.classList.add("hidden");
+        card.dataset.removed = "true";
         renderTotals(collectItemsFromForm());
+
+        const undoBar = document.createElement("div");
+        undoBar.className = "undo-bar";
+        undoBar.innerHTML = `<span>Item removed.</span><button type="button" class="secondary undo-button">Undo</button>`;
+        card.parentNode.insertBefore(undoBar, card.nextSibling);
+
+        const undoTimeout = window.setTimeout(() => {
+          card.remove();
+          undoBar.remove();
+        }, 5000);
+
+        undoBar.querySelector(".undo-button").addEventListener("click", () => {
+          window.clearTimeout(undoTimeout);
+          card.classList.remove("hidden");
+          delete card.dataset.removed;
+          undoBar.remove();
+          renderTotals(collectItemsFromForm());
+        });
       });
     }
   });
@@ -888,32 +907,76 @@ function scrollToSection(selector) {
   }
 }
 
+const imageInput = document.getElementById("image-input");
+if (imageInput) {
+  imageInput.addEventListener("change", () => {
+    const file = imageInput.files[0];
+    if (file && file.type.startsWith("image/")) {
+      const url = URL.createObjectURL(file);
+      previewImage.src = url;
+      previewImage.classList.remove("hidden");
+      previewImage.onload = () => URL.revokeObjectURL(url);
+    }
+  });
+}
+
 analyzeForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  statusEl.textContent = "Uploading image and running the local pipeline...";
 
   const sourceFile = document.getElementById("image-input").files[0];
   if (!sourceFile) {
     statusEl.textContent = "Take a photo or choose one from your gallery first.";
     return;
   }
+
+  statusEl.innerHTML = '<span class="analyzing-indicator">Analyzing meal photo\u2026 this may take 15\u201330 seconds.</span>';
+  analyzeForm.querySelector("button[type='submit']").disabled = true;
+
   const formData = new FormData();
   formData.append("meal_name", document.getElementById("meal-name").value.trim());
   formData.append("image", await compressImage(sourceFile));
-  const response = await fetch("/api/analyze", {
-    method: "POST",
-    body: formData,
-  });
-  const payload = await response.json();
-  if (!response.ok) {
-    statusEl.textContent = payload.error || "Analysis failed.";
+
+  let payload;
+  try {
+    const response = await fetch("/api/analyze", {
+      method: "POST",
+      body: formData,
+    });
+    payload = await response.json();
+    if (!response.ok) {
+      statusEl.textContent = payload.error || "Analysis failed.";
+      analyzeForm.querySelector("button[type='submit']").disabled = false;
+      return;
+    }
+  } catch (err) {
+    statusEl.textContent = "Network error during analysis. Check that the server is running.";
+    analyzeForm.querySelector("button[type='submit']").disabled = false;
     return;
   }
+
+  analyzeForm.querySelector("button[type='submit']").disabled = false;
   currentImagePath = payload.image_path;
   previewImage.src = payload.image_path;
   previewImage.classList.remove("hidden");
   resultsEmpty.classList.add("hidden");
   resultsForm.classList.remove("hidden");
+
+  (payload.items || []).forEach((item) => {
+    const name = normalizeLabel(item.canonical_name);
+    if (name && item.serving_grams) {
+      nutritionLookup[name] = {
+        serving_grams: safeNumber(item.serving_grams, safeNumber(item.per_serving_calories ? 100 : 0)),
+        calories: safeNumber(item.per_serving_calories, safeNumber(item.calories)),
+        protein_g: safeNumber(item.per_serving_protein_g, safeNumber(item.protein_g)),
+        carbs_g: safeNumber(item.per_serving_carbs_g, safeNumber(item.carbs_g)),
+        fat_g: safeNumber(item.per_serving_fat_g, safeNumber(item.fat_g)),
+      };
+    }
+    if (name && !appState.availableFoods.includes(name)) {
+      appState.availableFoods.push(name);
+    }
+  });
+
   renderItems(payload.items);
   renderAnalysisMetadata(payload.provider_metadata);
   statusEl.textContent = "Review the detected foods, adjust portions, then save the meal.";
