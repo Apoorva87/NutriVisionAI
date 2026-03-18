@@ -269,5 +269,71 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertNotIn("api_key", captured_payload)
 
 
+    def test_ai_food_lookup_rejects_empty_query(self) -> None:
+        request = self.make_request()
+        with patch.object(request, "json", return_value={"query": ""}):
+            response = asyncio.run(main.ai_food_lookup(request))
+        self.assertEqual(response.status_code, 400)
+
+    def test_ai_food_lookup_rejects_attack_vectors(self) -> None:
+        request = self.make_request()
+        with patch.object(request, "json", return_value={"query": "<script>alert(1)</script>"}):
+            response = asyncio.run(main.ai_food_lookup(request))
+        self.assertEqual(response.status_code, 400)
+        payload = json.loads(response.body.decode())
+        self.assertIn("Invalid characters", payload["error"])
+
+    def test_ai_food_lookup_returns_estimate(self) -> None:
+        request = self.make_request()
+        mock_llm_response = '{"food_name": "paneer tikka", "serving_grams": 150, "calories": 320, "protein_g": 22, "carbs_g": 8, "fat_g": 24, "confidence": 0.8, "notes": "grilled cottage cheese"}'
+        with patch.object(request, "json", return_value={"query": "paneer tikka"}), \
+             patch("app.services.LMStudioClient") as MockClient:
+            mock_instance = MockClient.return_value
+            mock_instance.chat_text.return_value = mock_llm_response
+            response = asyncio.run(main.ai_food_lookup(request))
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode())
+        self.assertEqual(payload["query"], "paneer tikka")
+        self.assertIsNotNone(payload["ai_estimate"])
+        self.assertEqual(payload["ai_estimate"]["calories"], 320)
+        self.assertEqual(payload["ai_estimate"]["source"], "ai_estimate")
+
+    def test_ai_food_save_persists_item(self) -> None:
+        request = self.make_request()
+        body = {
+            "food_name": "test ai food",
+            "serving_grams": 100,
+            "calories": 200,
+            "protein_g": 15,
+            "carbs_g": 25,
+            "fat_g": 8,
+            "source": "ai_lookup",
+            "notes": "test save",
+        }
+        with patch.object(request, "json", return_value=body):
+            response = asyncio.run(main.ai_food_save_to_db(request))
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.body.decode())
+        self.assertTrue(payload["ok"])
+        # Verify it's in the DB
+        saved = db.fetch_nutrition_item("test ai food")
+        self.assertIsNotNone(saved)
+        self.assertAlmostEqual(float(saved["calories"]), 200)
+
+    def test_ai_food_save_rejects_invalid_name(self) -> None:
+        request = self.make_request()
+        body = {
+            "food_name": "<script>alert(1)</script>",
+            "serving_grams": 100,
+            "calories": 200,
+            "protein_g": 15,
+            "carbs_g": 25,
+            "fat_g": 8,
+        }
+        with patch.object(request, "json", return_value=body):
+            response = asyncio.run(main.ai_food_save_to_db(request))
+        self.assertEqual(response.status_code, 400)
+
+
 if __name__ == "__main__":
     unittest.main()

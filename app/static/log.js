@@ -206,3 +206,159 @@ document.getElementById("create-fav-form").addEventListener("submit", async (e) 
     showToast("Error saving");
   }
 });
+
+/* ── AI Help bottom sheet ────────────────────────────────── */
+const aiPanel = document.getElementById("ai-help-panel");
+const aiFab = document.getElementById("ai-help-toggle");
+const aiClose = document.getElementById("ai-help-close");
+const aiRefresh = document.getElementById("ai-help-refresh");
+const aiQuery = document.getElementById("ai-help-query");
+const aiGo = document.getElementById("ai-help-go");
+const aiWebCheck = document.getElementById("ai-help-web-check");
+const aiResults = document.getElementById("ai-help-results");
+
+let lastAiQuery = "";
+
+aiFab.addEventListener("click", () => {
+  aiPanel.classList.remove("hidden");
+  aiFab.classList.add("is-open");
+  aiQuery.focus();
+});
+
+aiClose.addEventListener("click", () => {
+  aiPanel.classList.add("hidden");
+  aiFab.classList.remove("is-open");
+});
+
+aiQuery.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") doAiLookup();
+});
+aiGo.addEventListener("click", doAiLookup);
+aiRefresh.addEventListener("click", doAiLookup);
+
+async function doAiLookup() {
+  const q = aiQuery.value.trim();
+  if (!q) { showToast("Enter a food name"); return; }
+  lastAiQuery = q;
+
+  aiGo.disabled = true;
+  aiRefresh.disabled = true;
+  aiResults.innerHTML = '<div class="empty-state small">Looking up "' + escapeHtml(q) + '"...</div>';
+
+  try {
+    const res = await fetch("/api/ai-food-lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: q, web_search: aiWebCheck.checked }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      aiResults.innerHTML = '<div class="empty-state small">' + escapeHtml(data.error || "Lookup failed") + '</div>';
+      return;
+    }
+    renderAiResults(data);
+  } catch (err) {
+    aiResults.innerHTML = '<div class="empty-state small">Network error. Check AI provider in Settings.</div>';
+  } finally {
+    aiGo.disabled = false;
+    aiRefresh.disabled = false;
+  }
+}
+
+function renderAiResults(data) {
+  let html = "";
+
+  if (data.ai_estimate) {
+    html += buildResultCard(data.ai_estimate, "ai");
+  }
+  if (data.web_result) {
+    if (data.web_result.source === "web_search_raw") {
+      html += '<div class="ai-result-card is-web"><span class="ai-result-label">Web</span>'
+        + '<div class="ai-result-notes">' + escapeHtml(data.web_result.snippet || "") + '</div>'
+        + '<div class="ai-result-notes">' + escapeHtml(data.web_result.notes || "") + '</div></div>';
+    } else {
+      html += buildResultCard(data.web_result, "web");
+    }
+  }
+
+  if (!html) {
+    html = '<div class="empty-state small">No results found. Try a different food name.</div>';
+  }
+
+  aiResults.innerHTML = html;
+  attachAiResultListeners();
+}
+
+function buildResultCard(item, type) {
+  const label = type === "ai" ? "AI Estimate" : "Web Search";
+  const cls = type === "ai" ? "is-ai" : "is-web";
+  const d = JSON.stringify(item).replace(/"/g, "&quot;");
+  return '<div class="ai-result-card ' + cls + '" data-ai-item="' + d + '">'
+    + '<span class="ai-result-label">' + label + '</span>'
+    + '<div class="ai-result-name">' + escapeHtml(item.food_name) + '</div>'
+    + '<div class="ai-result-serving">Per serving: ' + Math.round(item.serving_grams) + 'g</div>'
+    + '<div class="ai-result-macros">'
+    + '  <span>Cal <strong>' + Math.round(item.calories) + '</strong></span>'
+    + '  <span>P <strong>' + item.protein_g.toFixed(1) + 'g</strong></span>'
+    + '  <span>C <strong>' + item.carbs_g.toFixed(1) + 'g</strong></span>'
+    + '  <span>F <strong>' + item.fat_g.toFixed(1) + 'g</strong></span>'
+    + '</div>'
+    + (item.notes ? '<div class="ai-result-notes">' + escapeHtml(item.notes) + '</div>' : '')
+    + (item.confidence != null ? '<div class="ai-result-notes">Confidence: ' + Math.round(item.confidence * 100) + '%</div>' : '')
+    + '<div class="ai-result-actions">'
+    + '  <button type="button" class="btn-use">Use in meal</button>'
+    + '  <button type="button" class="btn-save-db">Save to DB</button>'
+    + '</div>'
+    + '</div>';
+}
+
+function attachAiResultListeners() {
+  aiResults.querySelectorAll(".ai-result-card[data-ai-item]").forEach((card) => {
+    const item = JSON.parse(card.dataset.aiItem);
+
+    card.querySelector(".btn-use").addEventListener("click", () => {
+      // Seed nutritionLookup so calcNutrition works for this item
+      const pg = item.serving_grams || 100;
+      nutritionLookup[item.food_name.toLowerCase()] = {
+        calories: item.calories / pg,
+        protein_g: item.protein_g / pg,
+        carbs_g: item.carbs_g / pg,
+        fat_g: item.fat_g / pg,
+      };
+      addToBuilder(item.food_name.toLowerCase(), Math.round(pg));
+      showToast("Added to meal builder");
+      // Switch to search tab to show builder
+      logTabs.querySelectorAll("button").forEach((b) => b.classList.remove("is-active"));
+      logTabs.querySelector("[data-tab='search']").classList.add("is-active");
+      tabSearch.classList.remove("hidden");
+      tabFavorites.classList.add("hidden");
+    });
+
+    card.querySelector(".btn-save-db").addEventListener("click", async () => {
+      const btn = card.querySelector(".btn-save-db");
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+      try {
+        const res = await fetch("/api/ai-food-lookup/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(item),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          btn.textContent = "Saved!";
+          btn.style.opacity = "0.6";
+          showToast('"' + item.food_name + '" saved to nutrition DB');
+        } else {
+          btn.textContent = "Save to DB";
+          btn.disabled = false;
+          showToast(data.error || "Save failed");
+        }
+      } catch (err) {
+        btn.textContent = "Save to DB";
+        btn.disabled = false;
+        showToast("Network error");
+      }
+    });
+  });
+}
