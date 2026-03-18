@@ -1183,27 +1183,37 @@ label.field > span {
 .ai-help-fab:active { transform: scale(0.96); }
 .ai-help-fab.is-open { display: none; }
 
+.ai-help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 54;
+  background: rgba(0,0,0,0.35);
+}
+.ai-help-backdrop.hidden { display: none; }
+
 .ai-help-sheet {
   position: fixed;
-  bottom: calc(var(--tab-height) + var(--safe-bottom));
-  left: 0;
-  right: 0;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   z-index: 55;
-  max-height: 38vh;
+  width: calc(100% - 32px);
+  max-width: 400px;
+  max-height: 80vh;
   display: flex;
   flex-direction: column;
   background: var(--panel);
-  border-top: 1px solid var(--line);
-  border-radius: 16px 16px 0 0;
-  box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
   padding: 0 0 8px;
-  animation: sheetSlideUp 0.25s ease-out;
+  animation: sheetFadeIn 0.2s ease-out;
 }
 .ai-help-sheet.hidden { display: none; }
 
-@keyframes sheetSlideUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+@keyframes sheetFadeIn {
+  from { opacity: 0; transform: translate(-50%, -48%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
 }
 
 .ai-help-header {
@@ -1313,19 +1323,39 @@ label.field > span {
   color: var(--text);
 }
 .ai-result-actions .btn-use { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ai-result-actions .btn-edit { background: var(--bg); color: var(--text); border-color: var(--line); }
 .ai-result-actions .btn-save-db { background: var(--green-soft); color: var(--green); border-color: rgba(58,140,92,0.3); }
 
+.ai-edit-form { margin-top: 8px; }
+.ai-edit-form label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 2px; }
+.ai-edit-form input {
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 0.84rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  margin-bottom: 6px;
+}
+.ai-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
+.ai-edit-actions { display: flex; gap: 6px; margin-top: 4px; }
+.ai-edit-actions button {
+  width: auto;
+  min-height: 0;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+}
+.ai-edit-actions .btn-save-edited { background: var(--green-soft); color: var(--green); border-color: rgba(58,140,92,0.3); }
+.ai-edit-actions .btn-cancel-edit { background: var(--bg); }
+
 @media (min-width: 768px) {
-  .ai-help-sheet {
-    max-width: 480px;
-    left: 50%;
-    right: auto;
-    width: 100%;
-    transform: translateX(-50%);
-  }
-  .ai-help-fab {
-    right: calc(50% - 240px + 16px);
-  }
+  .ai-help-sheet { max-width: 440px; }
 }
 
 /* ── Animations ───────────────────────────────────────────── */

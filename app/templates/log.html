@@ -102,7 +102,10 @@
   AI Help
 </button>
 
-<!-- AI Help bottom sheet -->
+<!-- AI Help backdrop -->
+<div id="ai-help-backdrop" class="ai-help-backdrop hidden"></div>
+
+<!-- AI Help modal -->
 <div id="ai-help-panel" class="ai-help-sheet hidden">
   <div class="ai-help-header">
     <div class="ai-help-title">
@@ -144,5 +147,5 @@
     model: "{{ llm_model }}",
   };
 </script>
-<script src="/static/log.js?v=2"></script>
+<script src="/static/log.js?v=3"></script>
 {% endblock %}

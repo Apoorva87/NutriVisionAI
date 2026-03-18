@@ -207,8 +207,9 @@ document.getElementById("create-fav-form").addEventListener("submit", async (e) 
   }
 });
 
-/* ── AI Help bottom sheet ────────────────────────────────── */
+/* ── AI Help modal ────────────────────────────────────────── */
 const aiPanel = document.getElementById("ai-help-panel");
+const aiBackdrop = document.getElementById("ai-help-backdrop");
 const aiFab = document.getElementById("ai-help-toggle");
 const aiClose = document.getElementById("ai-help-close");
 const aiRefresh = document.getElementById("ai-help-refresh");
@@ -219,16 +220,22 @@ const aiResults = document.getElementById("ai-help-results");
 
 let lastAiQuery = "";
 
-aiFab.addEventListener("click", () => {
+function openAiModal() {
   aiPanel.classList.remove("hidden");
+  aiBackdrop.classList.remove("hidden");
   aiFab.classList.add("is-open");
   aiQuery.focus();
-});
+}
 
-aiClose.addEventListener("click", () => {
+function closeAiModal() {
   aiPanel.classList.add("hidden");
+  aiBackdrop.classList.add("hidden");
   aiFab.classList.remove("is-open");
-});
+}
+
+aiFab.addEventListener("click", openAiModal);
+aiClose.addEventListener("click", closeAiModal);
+aiBackdrop.addEventListener("click", closeAiModal);
 
 aiQuery.addEventListener("keydown", (e) => {
   if (e.key === "Enter") doAiLookup();
@@ -294,71 +301,137 @@ function buildResultCard(item, type) {
   const cls = type === "ai" ? "is-ai" : "is-web";
   const d = JSON.stringify(item).replace(/"/g, "&quot;");
   return '<div class="ai-result-card ' + cls + '" data-ai-item="' + d + '">'
-    + '<span class="ai-result-label">' + label + '</span>'
-    + '<div class="ai-result-name">' + escapeHtml(item.food_name) + '</div>'
-    + '<div class="ai-result-serving">Per serving: ' + Math.round(item.serving_grams) + 'g</div>'
-    + '<div class="ai-result-macros">'
-    + '  <span>Cal <strong>' + Math.round(item.calories) + '</strong></span>'
-    + '  <span>P <strong>' + item.protein_g.toFixed(1) + 'g</strong></span>'
-    + '  <span>C <strong>' + item.carbs_g.toFixed(1) + 'g</strong></span>'
-    + '  <span>F <strong>' + item.fat_g.toFixed(1) + 'g</strong></span>'
+    + '<div class="ai-result-display">'
+    + '  <span class="ai-result-label">' + label + '</span>'
+    + '  <div class="ai-result-name">' + escapeHtml(item.food_name) + '</div>'
+    + '  <div class="ai-result-serving">Per serving: ' + Math.round(item.serving_grams) + 'g</div>'
+    + '  <div class="ai-result-macros">'
+    + '    <span>Cal <strong>' + Math.round(item.calories) + '</strong></span>'
+    + '    <span>P <strong>' + item.protein_g.toFixed(1) + 'g</strong></span>'
+    + '    <span>C <strong>' + item.carbs_g.toFixed(1) + 'g</strong></span>'
+    + '    <span>F <strong>' + item.fat_g.toFixed(1) + 'g</strong></span>'
+    + '  </div>'
+    + (item.notes ? '  <div class="ai-result-notes">' + escapeHtml(item.notes) + '</div>' : '')
+    + (item.confidence != null ? '  <div class="ai-result-notes">Confidence: ' + Math.round(item.confidence * 100) + '%</div>' : '')
+    + '  <div class="ai-result-actions">'
+    + '    <button type="button" class="btn-use">Use in meal</button>'
+    + '    <button type="button" class="btn-edit">Edit</button>'
+    + '    <button type="button" class="btn-save-db">Save to DB</button>'
+    + '  </div>'
     + '</div>'
-    + (item.notes ? '<div class="ai-result-notes">' + escapeHtml(item.notes) + '</div>' : '')
-    + (item.confidence != null ? '<div class="ai-result-notes">Confidence: ' + Math.round(item.confidence * 100) + '%</div>' : '')
-    + '<div class="ai-result-actions">'
-    + '  <button type="button" class="btn-use">Use in meal</button>'
-    + '  <button type="button" class="btn-save-db">Save to DB</button>'
+    + '<div class="ai-edit-form hidden">'
+    + '  <label>Food name</label>'
+    + '  <input type="text" class="edit-name" value="' + escapeHtml(item.food_name) + '" />'
+    + '  <div class="ai-edit-grid">'
+    + '    <div><label>Serving (g)</label><input type="number" class="edit-serving" value="' + Math.round(item.serving_grams) + '" min="1" step="1" /></div>'
+    + '    <div><label>Calories</label><input type="number" class="edit-cal" value="' + Math.round(item.calories) + '" min="0" step="1" /></div>'
+    + '    <div><label>Protein (g)</label><input type="number" class="edit-p" value="' + item.protein_g.toFixed(1) + '" min="0" step="0.1" /></div>'
+    + '    <div><label>Carbs (g)</label><input type="number" class="edit-c" value="' + item.carbs_g.toFixed(1) + '" min="0" step="0.1" /></div>'
+    + '    <div><label>Fat (g)</label><input type="number" class="edit-f" value="' + item.fat_g.toFixed(1) + '" min="0" step="0.1" /></div>'
+    + '  </div>'
+    + '  <div class="ai-edit-actions">'
+    + '    <button type="button" class="btn-save-edited">Save to DB</button>'
+    + '    <button type="button" class="btn-use-edited">Use in meal</button>'
+    + '    <button type="button" class="btn-cancel-edit">Cancel</button>'
+    + '  </div>'
     + '</div>'
     + '</div>';
+}
+
+function getEditedItem(card) {
+  return {
+    food_name: card.querySelector(".edit-name").value.trim(),
+    serving_grams: parseFloat(card.querySelector(".edit-serving").value) || 100,
+    calories: parseFloat(card.querySelector(".edit-cal").value) || 0,
+    protein_g: parseFloat(card.querySelector(".edit-p").value) || 0,
+    carbs_g: parseFloat(card.querySelector(".edit-c").value) || 0,
+    fat_g: parseFloat(card.querySelector(".edit-f").value) || 0,
+    source: "ai_lookup",
+    notes: "edited by user",
+  };
+}
+
+function useItemInBuilder(item) {
+  const pg = item.serving_grams || 100;
+  nutritionLookup[item.food_name.toLowerCase()] = {
+    calories: item.calories / pg,
+    protein_g: item.protein_g / pg,
+    carbs_g: item.carbs_g / pg,
+    fat_g: item.fat_g / pg,
+  };
+  addToBuilder(item.food_name.toLowerCase(), Math.round(pg));
+  showToast("Added to meal builder");
+  closeAiModal();
+  logTabs.querySelectorAll("button").forEach((b) => b.classList.remove("is-active"));
+  logTabs.querySelector("[data-tab='search']").classList.add("is-active");
+  tabSearch.classList.remove("hidden");
+  tabFavorites.classList.add("hidden");
+}
+
+async function saveItemToDB(item, btn) {
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+  try {
+    const res = await fetch("/api/ai-food-lookup/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(item),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      btn.textContent = "Saved!";
+      btn.style.opacity = "0.6";
+      showToast('"' + item.food_name + '" saved to nutrition DB');
+    } else {
+      btn.textContent = "Save to DB";
+      btn.disabled = false;
+      showToast(data.error || "Save failed");
+    }
+  } catch (err) {
+    btn.textContent = "Save to DB";
+    btn.disabled = false;
+    showToast("Network error");
+  }
 }
 
 function attachAiResultListeners() {
   aiResults.querySelectorAll(".ai-result-card[data-ai-item]").forEach((card) => {
     const item = JSON.parse(card.dataset.aiItem);
+    const display = card.querySelector(".ai-result-display");
+    const editForm = card.querySelector(".ai-edit-form");
 
-    card.querySelector(".btn-use").addEventListener("click", () => {
-      // Seed nutritionLookup so calcNutrition works for this item
-      const pg = item.serving_grams || 100;
-      nutritionLookup[item.food_name.toLowerCase()] = {
-        calories: item.calories / pg,
-        protein_g: item.protein_g / pg,
-        carbs_g: item.carbs_g / pg,
-        fat_g: item.fat_g / pg,
-      };
-      addToBuilder(item.food_name.toLowerCase(), Math.round(pg));
-      showToast("Added to meal builder");
-      // Switch to search tab to show builder
-      logTabs.querySelectorAll("button").forEach((b) => b.classList.remove("is-active"));
-      logTabs.querySelector("[data-tab='search']").classList.add("is-active");
-      tabSearch.classList.remove("hidden");
-      tabFavorites.classList.add("hidden");
+    // Use in meal (from display view)
+    card.querySelector(".btn-use").addEventListener("click", () => useItemInBuilder(item));
+
+    // Edit button — toggle to edit form
+    card.querySelector(".btn-edit").addEventListener("click", () => {
+      display.classList.add("hidden");
+      editForm.classList.remove("hidden");
     });
 
-    card.querySelector(".btn-save-db").addEventListener("click", async () => {
-      const btn = card.querySelector(".btn-save-db");
-      btn.disabled = true;
-      btn.textContent = "Saving...";
-      try {
-        const res = await fetch("/api/ai-food-lookup/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(item),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          btn.textContent = "Saved!";
-          btn.style.opacity = "0.6";
-          showToast('"' + item.food_name + '" saved to nutrition DB');
-        } else {
-          btn.textContent = "Save to DB";
-          btn.disabled = false;
-          showToast(data.error || "Save failed");
-        }
-      } catch (err) {
-        btn.textContent = "Save to DB";
-        btn.disabled = false;
-        showToast("Network error");
-      }
+    // Cancel edit — back to display
+    card.querySelector(".btn-cancel-edit").addEventListener("click", () => {
+      editForm.classList.add("hidden");
+      display.classList.remove("hidden");
+    });
+
+    // Save to DB (from display view — uses original values)
+    card.querySelector(".btn-save-db").addEventListener("click", () => {
+      saveItemToDB(item, card.querySelector(".btn-save-db"));
+    });
+
+    // Save to DB (from edit view — uses edited values)
+    card.querySelector(".btn-save-edited").addEventListener("click", () => {
+      const edited = getEditedItem(card);
+      if (!edited.food_name) { showToast("Enter a food name"); return; }
+      saveItemToDB(edited, card.querySelector(".btn-save-edited"));
+    });
+
+    // Use in meal (from edit view — uses edited values)
+    card.querySelector(".btn-use-edited").addEventListener("click", () => {
+      const edited = getEditedItem(card);
+      if (!edited.food_name) { showToast("Enter a food name"); return; }
+      useItemInBuilder(edited);
     });
   });
 }

@@ -218,7 +218,7 @@ class TestAiHelpFab:
 
 
 class TestAiHelpPanel:
-    """Bottom sheet layout and controls."""
+    """Modal layout and controls."""
 
     def test_panel_contains_input_and_buttons(self, page):
         page.click("#ai-help-toggle")
@@ -234,6 +234,26 @@ class TestAiHelpPanel:
         page.click("#ai-help-close")
         assert not page.locator("#ai-help-panel").is_visible(), "Panel should hide after close"
         assert page.locator("#ai-help-toggle").is_visible(), "FAB should reappear after close"
+
+    def test_backdrop_closes_modal(self, page):
+        page.click("#ai-help-toggle")
+        assert page.locator("#ai-help-panel").is_visible()
+        assert page.locator("#ai-help-backdrop").is_visible(), "Backdrop should be visible"
+
+        # Click top-left corner of backdrop (outside the centered modal)
+        page.click("#ai-help-backdrop", position={"x": 10, "y": 10}, force=True)
+        page.wait_for_timeout(300)
+        assert not page.locator("#ai-help-panel").is_visible(), "Clicking backdrop should close"
+
+    def test_modal_is_centered(self, page):
+        page.click("#ai-help-toggle")
+        box = page.locator("#ai-help-panel").bounding_box()
+        vw = page.viewport_size["width"]
+        vh = page.viewport_size["height"]
+        center_x = box["x"] + box["width"] / 2
+        center_y = box["y"] + box["height"] / 2
+        assert abs(center_x - vw / 2) < 10, f"Modal should be horizontally centered, cx={center_x}, vw/2={vw/2}"
+        assert abs(center_y - vh / 2) < 80, f"Modal should be roughly vertically centered, cy={center_y}, vh/2={vh/2}"
 
     def test_panel_has_title(self, page):
         page.click("#ai-help-toggle")
@@ -416,6 +436,129 @@ class TestAiHelpSaveToDB:
                 found = True
                 break
         assert found, "Saved food should appear in search results"
+
+
+class TestAiHelpEdit:
+    """Edit button allows customizing name and macros before saving."""
+
+    def test_edit_button_shows_form(self, page):
+        mock_llm_route(page, SAMPLE_AI_RESPONSE)
+        page.click("#ai-help-toggle")
+        page.fill("#ai-help-query", "paneer tikka")
+        page.click("#ai-help-go")
+        page.wait_for_selector(".ai-result-card", timeout=5000)
+
+        # Edit form should be hidden initially
+        assert not page.locator(".ai-edit-form").first.is_visible()
+
+        page.click(".btn-edit")
+        assert page.locator(".ai-edit-form").first.is_visible(), "Edit form should appear"
+        assert not page.locator(".ai-result-display").first.is_visible(), "Display should hide"
+
+    def test_edit_form_has_prefilled_values(self, page):
+        mock_llm_route(page, SAMPLE_AI_RESPONSE)
+        page.click("#ai-help-toggle")
+        page.fill("#ai-help-query", "paneer tikka")
+        page.click("#ai-help-go")
+        page.wait_for_selector(".btn-edit", timeout=5000)
+        page.click(".btn-edit")
+
+        assert page.input_value(".edit-name") == "paneer tikka"
+        assert page.input_value(".edit-serving") == "150"
+        assert page.input_value(".edit-cal") == "320"
+        assert page.input_value(".edit-p") == "22.0"
+        assert page.input_value(".edit-c") == "8.0"
+        assert page.input_value(".edit-f") == "24.0"
+
+    def test_cancel_edit_returns_to_display(self, page):
+        mock_llm_route(page, SAMPLE_AI_RESPONSE)
+        page.click("#ai-help-toggle")
+        page.fill("#ai-help-query", "paneer tikka")
+        page.click("#ai-help-go")
+        page.wait_for_selector(".btn-edit", timeout=5000)
+        page.click(".btn-edit")
+
+        page.click(".btn-cancel-edit")
+        assert page.locator(".ai-result-display").first.is_visible(), "Display should reappear"
+        assert not page.locator(".ai-edit-form").first.is_visible(), "Edit form should hide"
+
+    def test_edit_and_save_sends_custom_values(self, page):
+        mock_llm_route(page, SAMPLE_AI_RESPONSE)
+        captured = mock_save_route(page)
+
+        page.click("#ai-help-toggle")
+        page.fill("#ai-help-query", "paneer tikka")
+        page.click("#ai-help-go")
+        page.wait_for_selector(".btn-edit", timeout=5000)
+        page.click(".btn-edit")
+
+        # Change the name and macros
+        page.fill(".edit-name", "homemade paneer curry")
+        page.fill(".edit-cal", "250")
+        page.fill(".edit-p", "18")
+        page.fill(".edit-c", "12")
+        page.fill(".edit-f", "15")
+        page.fill(".edit-serving", "200")
+
+        page.click(".btn-save-edited")
+        page.wait_for_timeout(1000)
+
+        assert "body" in captured
+        body = captured["body"]
+        assert body["food_name"] == "homemade paneer curry"
+        assert body["calories"] == 250
+        assert body["protein_g"] == 18
+        assert body["carbs_g"] == 12
+        assert body["fat_g"] == 15
+        assert body["serving_grams"] == 200
+
+    def test_edit_and_use_in_meal_uses_custom_values(self, page):
+        mock_llm_route(page, SAMPLE_AI_RESPONSE)
+        page.click("#ai-help-toggle")
+        page.fill("#ai-help-query", "paneer tikka")
+        page.click("#ai-help-go")
+        page.wait_for_selector(".btn-edit", timeout=5000)
+        page.click(".btn-edit")
+
+        page.fill(".edit-name", "my custom dish")
+        page.fill(".edit-cal", "500")
+        page.click(".btn-use-edited")
+        page.wait_for_timeout(500)
+
+        builder = page.locator("#meal-builder")
+        assert builder.is_visible()
+        assert "my custom dish" in builder.text_content().lower()
+
+    def test_save_edited_to_real_db(self, page):
+        """Full integration: edit values, save to real DB, verify in search."""
+        mock_llm_route(page, SAMPLE_AI_RESPONSE)
+
+        page.click("#ai-help-toggle")
+        page.fill("#ai-help-query", "paneer tikka")
+        page.click("#ai-help-go")
+        page.wait_for_selector(".btn-edit", timeout=5000)
+        page.click(".btn-edit")
+
+        page.fill(".edit-name", "test edited food")
+        page.fill(".edit-cal", "999")
+        page.fill(".edit-serving", "100")
+        page.click(".btn-save-edited")
+        page.wait_for_timeout(1500)
+
+        assert "Saved!" in page.locator(".btn-save-edited").first.text_content()
+
+        # Close modal and search for the edited name
+        page.click("#ai-help-close")
+        page.fill("#search-input", "test edited food")
+        page.wait_for_timeout(500)
+        page.wait_for_selector(".search-result", timeout=5000)
+        results = page.locator(".search-result")
+        found = False
+        for i in range(results.count()):
+            if "test edited food" in results.nth(i).text_content().lower():
+                found = True
+                break
+        assert found, "Edited food should appear in search results"
 
 
 class TestAiHelpErrorHandling:
