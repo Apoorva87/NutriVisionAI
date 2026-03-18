@@ -822,3 +822,32 @@ This file is the continuity log for future Codex sessions. Update it at the end 
 2. Expand Indian food catalog coverage.
 3. Add meal cloning / repeat-last-meal shortcuts.
 4. Add admin route authentication.
+
+## 2026-03-17 Session 22
+
+### Scope
+
+- Dashboard macro budget display with remaining protein/carbs/fat
+- Hover preview on recommendation cards showing projected budget impact
+- Adjustable calorie budget control for LLM meal suggestions
+- Fixed LLM prompt to dynamically allocate calories per meal slot
+
+### Files Updated
+
+- `app/templates/dashboard.html` — macro remaining display, hover preview JS, calorie budget control, dynamic per-meal calorie allocation in prompt
+- `app/static/styles.css` — macro-goal/macro-remaining styles, hover preview state, calorie budget control styles
+- `README.md` — documented budget controls and macro display
+- `ARCHITECTURE.md` — documented dynamic calorie allocation and hover preview
+- `docs/EXECUTION_LOG.md` — this entry
+
+### Key Features Added
+
+1. **Macro budget display** — each macro pill shows goal and remaining (e.g. "/ 160g" and "48g left") with defaults for 2200 cal diet
+2. **Hover preview** — hovering/touching a recommendation card temporarily updates dashboard remaining numbers (green highlight)
+3. **Calorie budget control** — compact −/+ buttons (100 kcal steps) next to the keyword input; label always shows what was sent to the LLM
+4. **Dynamic calorie allocation** — per-meal calorie targets computed proportionally (breakfast 20%, lunch 35%, snack 10%, dinner 35%) so single-meal scenarios get the full budget instead of a fixed percentage
+
+### Verification
+
+- `pytest tests/ -v` — 20 tests passed
+- Live server tested at http://localhost:8000

@@ -110,7 +110,7 @@ NutriSight is a local-first FastAPI web app for photo-based nutrition logging. T
 The app uses server-rendered Jinja2 templates with per-page vanilla JS modules instead of a SPA framework. This keeps the stack simple, avoids build tooling, and works well for the mobile-first use case.
 
 ### AI Recommendations
-Meal recommendations call LM Studio directly from the browser via a server-side proxy (`/api/llm/chat`) to avoid CORS. The prompt is constructed client-side with full nutrition context (remaining calories, macros, time of day, eaten foods). Default cuisine is Indian vegetarian.
+Meal recommendations call LM Studio directly from the browser via a server-side proxy (`/api/llm/chat`) to avoid CORS. The prompt is constructed client-side with full nutrition context (remaining calories, macros, time of day, eaten foods). Default cuisine is Indian vegetarian. The calorie budget is dynamically allocated across remaining meal slots using proportional weights (breakfast 20%, lunch 35%, snack 10%, dinner 35%), and users can adjust the total budget with ±100 kcal controls before refreshing. Hovering a recommendation card previews the impact on remaining macro budgets.
 
 ### Macro Edit Override
 Users can override auto-calculated macros on analyzed items. Overrides are stored in card `dataset` attributes and persist through the save flow, giving users full control over nutritional accuracy.

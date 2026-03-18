@@ -69,6 +69,8 @@ Current test coverage includes nutrition math, daily aggregation, endpoint save 
 - Accounts for remaining calories, protein, carbs, and fat
 - Time-aware: breakfast (8am), lunch (12pm), snack (4pm), dinner (7pm)
 - 2 options per meal slot with ingredient weights
+- Dynamic per-meal calorie allocation that sums to the full budget
+- Adjustable calorie budget with −/+ buttons (100 kcal steps)
 - Indian vegetarian by default; override with keyword input
 - Refresh button to regenerate suggestions
 - Hidden after 9pm (no meals suggested)
@@ -81,10 +83,11 @@ Current test coverage includes nutrition math, daily aggregation, endpoint save 
 - Top logged foods section
 
 ### Dashboard
-- Dark card with today's calorie/macro summary
+- Dark card with today's calorie/macro summary and remaining budgets (protein, carbs, fat)
+- Hover/touch on recommendation cards previews how remaining budgets would change
 - Quick action buttons (Scan, Quick Log)
 - Recent meals with inline delete
-- AI meal plan section
+- AI meal plan section with adjustable calorie budget
 
 ## API Endpoints
 

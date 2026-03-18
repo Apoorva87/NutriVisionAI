@@ -204,11 +204,39 @@ h3 { font-size: 1rem; font-weight: 700; }
   font-weight: 700;
 }
 
+.macro-pill .macro-goal {
+  display: block;
+  font-size: 0.72rem;
+  color: rgba(247, 240, 227, 0.45);
+  margin-top: 1px;
+}
+
+.macro-pill .macro-remaining {
+  display: block;
+  font-size: 0.68rem;
+  color: rgba(188, 92, 56, 0.9);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
 .macro-pill .macro-label {
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: rgba(247, 240, 227, 0.5);
+}
+
+/* Hover preview state on dashboard card */
+.dashboard-card.is-previewing .calorie-remaining,
+.dashboard-card.is-previewing .macro-remaining {
+  color: #5cbc5c;
+  transition: color 0.15s ease;
+}
+
+/* Reco card hover highlight */
+.reco-card.is-hovered {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .dashboard-card.is-updated { animation: dashPulse 0.8s ease; }
@@ -1022,7 +1050,53 @@ label.field > span {
 }
 
 .reco-hint-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 10px;
+}
+
+.reco-hint-row .reco-hint-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.reco-cal-budget {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 2px 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.reco-cal-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+.reco-cal-btn:active { background: rgba(0,0,0,0.08); }
+
+#reco-cal-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 56px;
+  text-align: center;
 }
 
 .reco-hint-input {

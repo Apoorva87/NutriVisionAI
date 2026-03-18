@@ -25,14 +25,20 @@
   <div class="macro-row">
     <div class="macro-pill">
       <span class="macro-value" id="dash-protein">{{ dashboard.protein_g | round(0) | int }}</span>
+      <span class="macro-goal">/ {{ dashboard.macro_goals.protein_g | default(160, true) }}g</span>
+      <span class="macro-remaining" id="dash-protein-rem">{{ [dashboard.macro_goals.protein_g | default(160, true) - dashboard.protein_g, 0] | max | round(0) | int }}g left</span>
       <span class="macro-label">Protein</span>
     </div>
     <div class="macro-pill">
       <span class="macro-value" id="dash-carbs">{{ dashboard.carbs_g | round(0) | int }}</span>
+      <span class="macro-goal">/ {{ dashboard.macro_goals.carbs_g | default(220, true) }}g</span>
+      <span class="macro-remaining" id="dash-carbs-rem">{{ [dashboard.macro_goals.carbs_g | default(220, true) - dashboard.carbs_g, 0] | max | round(0) | int }}g left</span>
       <span class="macro-label">Carbs</span>
     </div>
     <div class="macro-pill">
       <span class="macro-value" id="dash-fat">{{ dashboard.fat_g | round(0) | int }}</span>
+      <span class="macro-goal">/ {{ dashboard.macro_goals.fat_g | default(70, true) }}g</span>
+      <span class="macro-remaining" id="dash-fat-rem">{{ [dashboard.macro_goals.fat_g | default(70, true) - dashboard.fat_g, 0] | max | round(0) | int }}g left</span>
       <span class="macro-label">Fat</span>
     </div>
   </div>
@@ -58,7 +64,12 @@
     </button>
   </div>
   <div class="reco-hint-row">
-    <input type="text" id="reco-hint" placeholder="Craving? e.g. indian, pasta, salad..." class="reco-hint-input" />
+    <input type="text" id="reco-hint" placeholder="Craving? e.g. indian, pasta..." class="reco-hint-input" />
+    <div class="reco-cal-budget">
+      <button type="button" id="reco-cal-down" class="reco-cal-btn" title="Less calories">&minus;</button>
+      <span id="reco-cal-label">0 kcal</span>
+      <button type="button" id="reco-cal-up" class="reco-cal-btn" title="More calories">+</button>
+    </div>
   </div>
   <div id="reco-cards" class="stack-sm"></div>
 </div>
@@ -97,6 +108,13 @@
       document.getElementById("dash-protein").textContent = Math.round(safeNumber(d.protein_g));
       document.getElementById("dash-carbs").textContent = Math.round(safeNumber(d.carbs_g));
       document.getElementById("dash-fat").textContent = Math.round(safeNumber(d.fat_g));
+      // Update remaining displays
+      const pGoal = {{ dashboard.macro_goals.protein_g | default(160, true) }};
+      const cGoal = {{ dashboard.macro_goals.carbs_g | default(220, true) }};
+      const fGoal = {{ dashboard.macro_goals.fat_g | default(70, true) }};
+      document.getElementById("dash-protein-rem").textContent = Math.max(0, Math.round(pGoal - safeNumber(d.protein_g))) + "g left";
+      document.getElementById("dash-carbs-rem").textContent = Math.max(0, Math.round(cGoal - safeNumber(d.carbs_g))) + "g left";
+      document.getElementById("dash-fat-rem").textContent = Math.max(0, Math.round(fGoal - safeNumber(d.fat_g))) + "g left";
       dashCard.classList.add("is-updated");
       window.setTimeout(() => dashCard.classList.remove("is-updated"), 800);
     } catch (e) {}
@@ -108,6 +126,9 @@
   const recoSection = document.getElementById("reco-section");
   const recoHint = document.getElementById("reco-hint");
   const recoRefresh = document.getElementById("reco-refresh");
+  const recoCalLabel = document.getElementById("reco-cal-label");
+  const recoCalDown = document.getElementById("reco-cal-down");
+  const recoCalUp = document.getElementById("reco-cal-up");
 
   const llmBaseUrl = "{{ llm_base_url }}";
   const llmModel = "{{ llm_model }}";
@@ -127,6 +148,21 @@
     eaten: [{% for m in recent_meals %}"{{ m.meal_name | replace('"', '\\"') }}"{% if not loop.last %},{% endif %}{% endfor %}],
   };
 
+  // Calorie budget: tracks what was actually sent to the LLM
+  let requestedBudget = dashData.remaining_cal;
+  const CAL_STEP = 100;
+
+  function updateCalLabel() {
+    recoCalLabel.textContent = requestedBudget + " kcal";
+  }
+
+  recoCalDown.addEventListener("click", () => {
+    if (requestedBudget >= CAL_STEP) { requestedBudget -= CAL_STEP; updateCalLabel(); }
+  });
+  recoCalUp.addEventListener("click", () => {
+    requestedBudget += CAL_STEP; updateCalLabel();
+  });
+
   // Meal schedule: breakfast 8am, lunch 12pm, snack 4pm, dinner 7pm
   function getRemainingMeals() {
     const h = new Date().getHours();
@@ -145,8 +181,18 @@
     return `${((h % 12) || 12)}:${m < 10 ? "0" + m : m}${ampm}`;
   }
 
+  // Relative weight of each meal slot (used to split the calorie budget)
+  const MEAL_WEIGHTS = { breakfast: 0.20, lunch: 0.35, snack: 0.10, dinner: 0.35 };
+
+  function allocateBudget(meals, budget) {
+    // Compute per-meal calorie targets proportional to weights, summing to exactly budget
+    const totalW = meals.reduce((s, m) => s + (MEAL_WEIGHTS[m] || 0.25), 0);
+    return meals.map(m => ({ meal: m, kcal: Math.round(budget * (MEAL_WEIGHTS[m] || 0.25) / totalW) }));
+  }
+
   function buildRecoPrompt(hint) {
     const d = dashData;
+    const budget = requestedBudget;
     const remP = Math.max(0, d.protein_goal - d.protein_g);
     const remC = Math.max(0, d.carbs_goal - d.carbs_g);
     const remF = Math.max(0, d.fat_goal - d.fat_g);
@@ -156,15 +202,18 @@
       ? ` The user has a preference/craving: "${hint}". Incorporate this into your suggestions.`
       : ` Default preference: Indian vegetarian cuisine. Suggest Indian vegetarian meals unless overridden.`;
 
+    const alloc = allocateBudget(meals, budget);
+    const allocLine = alloc.map(a => `${a.meal}: ~${a.kcal} kcal`).join(", ");
+
     return `You are a nutrition assistant. The current time is ${currentTimeStr()}. ` +
       `The user's meal schedule is: breakfast at 8am, lunch at 12pm, snack at 4pm, dinner at 7pm. ` +
       `Based on the current time, the ONLY remaining meal slots are: ${meals.join(", ")}. ` +
       `Do NOT suggest meals for slots that have already passed. ` +
       `Eaten so far today: ${eaten}. ` +
-      `REMAINING budget to fill across ALL suggestions: ${d.remaining_cal} kcal, ${remP}g protein, ${remC}g carbs, ${remF}g fat. ` +
-      `Daily goals: ${d.calorie_goal} kcal, ${d.protein_goal}g protein, ${d.carbs_goal}g carbs, ${d.fat_goal}g fat. ` +
-      `IMPORTANT: The total calories across ALL suggestions MUST roughly add up to ${d.remaining_cal} kcal. ` +
-      `Distribute sensibly — dinner ~35-40%, lunch ~30-35%, snack ~10-15%, breakfast ~20-25%.${hintLine} ` +
+      `TOTAL calorie budget for ALL remaining meals: EXACTLY ${budget} kcal. Also target: ${remP}g protein, ${remC}g carbs, ${remF}g fat. ` +
+      `Calorie allocation per meal slot: ${allocLine}. ` +
+      `CRITICAL: Each option for a meal slot MUST be close to that slot's allocated calories. ` +
+      `When the user picks one option per slot, the total MUST add up to ~${budget} kcal.${hintLine} ` +
       `For EACH remaining meal slot, suggest exactly 2 different options (so the user can choose). ` +
       `For each suggestion, include approximate weights of the main ingredients (e.g. "150g chicken breast, 200g rice, 100g broccoli"). ` +
       `Reply ONLY with a JSON array. Each object has: meal (must be one of: ${meals.join(", ")}), ` +
@@ -190,7 +239,7 @@
       html += `<div class="reco-group-options">`;
       items.forEach((s, i) => {
         html += `
-          <div class="reco-card">
+          <div class="reco-card" data-cal="${s.calories || 0}" data-p="${s.protein_g || 0}" data-c="${s.carbs_g || 0}" data-f="${s.fat_g || 0}">
             <div class="reco-body">
               <strong>${escapeHtml(s.food || "")}</strong>
               ${s.ingredients ? `<p class="reco-ingredients">${escapeHtml(s.ingredients)}</p>` : ''}
@@ -205,6 +254,46 @@
       html += `</div></div>`;
     }
     recoCards.innerHTML = html;
+    attachRecoHoverListeners();
+  }
+
+  // Hover preview: temporarily show how picking a reco card changes remaining budgets
+  const origRemaining = {
+    cal: dashData.remaining_cal,
+    p: Math.max(0, dashData.protein_goal - dashData.protein_g),
+    c: Math.max(0, dashData.carbs_goal - dashData.carbs_g),
+    f: Math.max(0, dashData.fat_goal - dashData.fat_g),
+  };
+
+  function previewReco(card) {
+    const cal = parseInt(card.dataset.cal) || 0;
+    const p = parseInt(card.dataset.p) || 0;
+    const c = parseInt(card.dataset.c) || 0;
+    const f = parseInt(card.dataset.f) || 0;
+    document.getElementById("dash-remaining").textContent = Math.max(0, origRemaining.cal - cal);
+    document.getElementById("dash-protein-rem").textContent = Math.max(0, origRemaining.p - p) + "g left";
+    document.getElementById("dash-carbs-rem").textContent = Math.max(0, origRemaining.c - c) + "g left";
+    document.getElementById("dash-fat-rem").textContent = Math.max(0, origRemaining.f - f) + "g left";
+    dashCard.classList.add("is-previewing");
+    card.classList.add("is-hovered");
+  }
+
+  function restoreReco() {
+    document.getElementById("dash-remaining").textContent = origRemaining.cal;
+    document.getElementById("dash-protein-rem").textContent = origRemaining.p + "g left";
+    document.getElementById("dash-carbs-rem").textContent = origRemaining.c + "g left";
+    document.getElementById("dash-fat-rem").textContent = origRemaining.f + "g left";
+    dashCard.classList.remove("is-previewing");
+    recoCards.querySelectorAll(".reco-card.is-hovered").forEach(c => c.classList.remove("is-hovered"));
+  }
+
+  function attachRecoHoverListeners() {
+    recoCards.querySelectorAll(".reco-card").forEach(card => {
+      card.addEventListener("mouseenter", () => previewReco(card));
+      card.addEventListener("mouseleave", restoreReco);
+      card.addEventListener("touchstart", (e) => { e.preventDefault(); previewReco(card); }, { passive: false });
+      card.addEventListener("touchend", restoreReco);
+    });
   }
 
   function parseJsonArray(text) {
@@ -225,6 +314,7 @@
   }
 
   async function loadRecommendations() {
+    updateCalLabel();
     if (llmProvider === "stub" || !llmBaseUrl || !llmModel) {
       recoSection.classList.add("hidden");
       return;
@@ -233,7 +323,7 @@
       recoSection.classList.add("hidden");
       return;
     }
-    if (dashData.remaining_cal < 50) {
+    if (requestedBudget < 50) {
       recoCards.innerHTML = '<div class="reco-card"><div class="reco-body"><strong>You\'re all set!</strong><p>You\'ve met your calorie goal for today.</p></div></div>';
       recoSection.classList.remove("hidden");
       return;
