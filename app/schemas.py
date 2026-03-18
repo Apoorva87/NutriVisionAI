@@ -1,6 +1,7 @@
+import re
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Detection(BaseModel):
@@ -65,9 +66,19 @@ class SettingsPayload(BaseModel):
     lmstudio_portion_model: str = "qwen/qwen3-vl-8b"
 
 
+_EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+
+
 class AuthPayload(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     email: str = Field(min_length=3, max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_format(cls, v: str) -> str:
+        if not _EMAIL_RE.match(v.strip()):
+            raise ValueError("Invalid email address format")
+        return v.strip().lower()
 
 
 class UserRecord(BaseModel):

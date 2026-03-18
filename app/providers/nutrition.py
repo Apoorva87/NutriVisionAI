@@ -1,12 +1,16 @@
+import time
 from difflib import get_close_matches
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 from app.db import (
     fetch_nutrition_alias,
     fetch_nutrition_item,
     fetch_nutrition_source_item_by_label,
-    search_nutrition_items,
+    search_nutrition_names,
 )
+
+# Cache canonical names for fuzzy matching (refreshed every 60 seconds)
+_names_cache: Tuple[float, List[str]] = (0.0, [])
 
 
 ALIASES = {
@@ -47,8 +51,12 @@ def normalize_food_name(name: str) -> Optional[str]:
     if source_item:
         return str(source_item["canonical_name"]).strip().lower()
 
-    all_names = [item["canonical_name"] for item in search_nutrition_items()]
-    match = get_close_matches(lowered, all_names, n=1, cutoff=0.6)
+    global _names_cache
+    cache_ts, cached_names = _names_cache
+    if not cached_names or (time.monotonic() - cache_ts) > 60:
+        cached_names = search_nutrition_names()
+        _names_cache = (time.monotonic(), cached_names)
+    match = get_close_matches(lowered, cached_names, n=1, cutoff=0.6)
     return match[0] if match else None
 
 

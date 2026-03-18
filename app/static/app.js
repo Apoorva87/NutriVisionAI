@@ -1,3 +1,8 @@
+/* ── app.js (legacy single-page logic) ─────────────────────── */
+/* NOTE: This file is only loaded by the legacy index.html template.
+   Functions duplicated in shared.js are intentionally removed here;
+   shared.js is always loaded first via base.html. */
+
 const analyzeForm = document.getElementById("analyze-form");
 const resultsForm = document.getElementById("results-form");
 const resultsList = document.getElementById("results-list");
@@ -95,7 +100,8 @@ if (stateElement) {
   }
 }
 
-const nutritionLookup = {
+/* Seed the shared nutritionLookup (from shared.js) with fallback data */
+Object.assign(nutritionLookup, {
   banana: { serving_grams: 118, calories: 105, protein_g: 1.3, carbs_g: 27, fat_g: 0.4 },
   broccoli: { serving_grams: 91, calories: 31, protein_g: 2.5, carbs_g: 6, fat_g: 0.3 },
   "chicken breast": { serving_grams: 100, calories: 165, protein_g: 31, carbs_g: 0, fat_g: 3.6 },
@@ -112,49 +118,16 @@ const nutritionLookup = {
   rice: { serving_grams: 158, calories: 205, protein_g: 4.3, carbs_g: 44.5, fat_g: 0.4 },
   salad: { serving_grams: 100, calories: 33, protein_g: 1.8, carbs_g: 6.4, fat_g: 0.4 },
   vegetables: { serving_grams: 100, calories: 65, protein_g: 2.2, carbs_g: 11.8, fat_g: 1.2 },
-};
+});
 
-function perGram(name) {
-  const item = nutritionLookup[name];
-  if (!item) {
-    return { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
-  }
-  return {
-    calories: item.calories / item.serving_grams,
-    protein_g: item.protein_g / item.serving_grams,
-    carbs_g: item.carbs_g / item.serving_grams,
-    fat_g: item.fat_g / item.serving_grams,
-  };
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+/* perGram, escapeHtml, safeNumber, normalizeLabel, formatMealDate, parseRange,
+   compressImage, calcNutrition, searchFoods are provided by shared.js */
 
 function formatValue(value, fallback = "—") {
   return value === undefined || value === null || value === "" ? fallback : value;
 }
 
-function formatMealDate(value) {
-  if (!value) {
-    return "Just now";
-  }
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return String(value);
-  }
-  return parsed.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
+/* formatMealDate is provided by shared.js */
 
 function getMealItems(meal) {
   if (!meal || typeof meal !== "object") {
@@ -178,31 +151,7 @@ function updateSelectedMealDetail(meal) {
   appState.mealDetail = meal;
 }
 
-function normalizeLabel(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function parseRange(value, fallback) {
-  const match = String(value || "").match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*g/i);
-  if (match) {
-    const min = Number(match[1]);
-    const max = Number(match[2]);
-    if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
-      return { min, mid: Math.round((min + max) / 2), max };
-    }
-  }
-  const grams = Number(fallback || 150);
-  return {
-    min: Math.max(25, Math.round(grams * portionPresets.min)),
-    mid: Math.max(25, Math.round(grams * portionPresets.mid)),
-    max: Math.max(25, Math.round(grams * portionPresets.max)),
-  };
-}
-
-function safeNumber(value, fallback = 0) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
+/* normalizeLabel, parseRange, safeNumber are provided by shared.js */
 
 function renderSelectOptions(choices, selectedValue) {
   return choices
@@ -651,29 +600,7 @@ async function fetchMealDetailById(mealId) {
   renderMealDetail();
 }
 
-async function compressImage(file) {
-  if (!file || !file.type.startsWith("image/") || typeof createImageBitmap !== "function") {
-    return file;
-  }
-  const bitmap = await createImageBitmap(file);
-  const longestEdge = Math.max(bitmap.width, bitmap.height);
-  const ratio = Math.min(1, 1400 / longestEdge);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(bitmap.width * ratio));
-  canvas.height = Math.max(1, Math.round(bitmap.height * ratio));
-  const context = canvas.getContext("2d");
-  if (!context) {
-    bitmap.close();
-    return file;
-  }
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
-  bitmap.close();
-  if (!blob) {
-    return file;
-  }
-  return new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "meal"}.jpg`, { type: "image/jpeg" });
-}
+/* compressImage is provided by shared.js */
 
 function collectItemsFromForm() {
   return [...document.querySelectorAll(".result-card")].filter((card) => !card.dataset.removed).map((card) => {
@@ -920,7 +847,7 @@ if (imageInput) {
   });
 }
 
-analyzeForm.addEventListener("submit", async (event) => {
+if (analyzeForm) analyzeForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const sourceFile = document.getElementById("image-input").files[0];
@@ -983,7 +910,7 @@ analyzeForm.addEventListener("submit", async (event) => {
   scrollToSection("#results-summary");
 });
 
-resultsForm.addEventListener("submit", async (event) => {
+if (resultsForm) resultsForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const items = collectItemsFromForm();
   if (!items.length) {
@@ -1031,7 +958,7 @@ resultsForm.addEventListener("submit", async (event) => {
   window.setTimeout(() => scrollToSection(".hero"), 60);
 });
 
-addItemButton.addEventListener("click", () => {
+if (addItemButton) addItemButton.addEventListener("click", () => {
   appendItemCard({
     detected_name: "manual item",
     canonical_name: appState.availableFoods[0] || "rice",

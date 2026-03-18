@@ -550,8 +550,9 @@ def run_analysis(image_path: Path) -> AnalysisResult:
                 "canonical_name": str(candidate["canonical_name"]),
             }
         )
-        db_match = bool(normalize_food_name(estimate.canonical_name))
-        effective_name = normalize_food_name(estimate.canonical_name) or estimate.canonical_name
+        resolved_name = normalize_food_name(estimate.canonical_name)
+        db_match = bool(resolved_name)
+        effective_name = resolved_name or estimate.canonical_name
         nutrition = nutrition_totals_for_name(effective_name, estimate.estimated_grams)
         nutrition_available = any(value > 0 for value in nutrition.values())
         items.append(

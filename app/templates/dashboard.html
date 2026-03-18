@@ -315,23 +315,23 @@
 
   async function loadRecommendations() {
     updateCalLabel();
-    if (llmProvider === "stub" || !llmBaseUrl || !llmModel) {
-      recoSection.classList.add("hidden");
+    recoSection.classList.remove("hidden");
+
+    if (!llmBaseUrl || !llmModel || llmProvider === "stub") {
+      recoCards.innerHTML = '<div class="empty-state">AI provider unavailable. <a href="/settings">Configure in Settings</a>.</div>';
       return;
     }
     if (getRemainingMeals().length === 0) {
-      recoSection.classList.add("hidden");
+      recoCards.innerHTML = '<div class="empty-state">All meals done for today. Check back tomorrow!</div>';
       return;
     }
     if (requestedBudget < 50) {
       recoCards.innerHTML = '<div class="reco-card"><div class="reco-body"><strong>You\'re all set!</strong><p>You\'ve met your calorie goal for today.</p></div></div>';
-      recoSection.classList.remove("hidden");
       return;
     }
 
     const hint = (recoHint && recoHint.value.trim()) || "";
     recoCards.innerHTML = '<div class="empty-state">Thinking...</div>';
-    recoSection.classList.remove("hidden");
     recoRefresh.disabled = true;
 
     try {
@@ -353,7 +353,7 @@
         recoCards.innerHTML = '<div class="empty-state">No suggestions returned. Try refreshing.</div>';
       }
     } catch (e) {
-      recoCards.innerHTML = '<div class="empty-state">Could not reach AI provider.</div>';
+      recoCards.innerHTML = '<div class="empty-state">AI provider unavailable. <a href="/settings">Configure in Settings</a>.</div>';
     } finally {
       recoRefresh.disabled = false;
     }

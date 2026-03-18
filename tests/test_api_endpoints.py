@@ -199,6 +199,75 @@ class ApiEndpointTests(unittest.TestCase):
         self.assertTrue(payload["items"])
         self.assertTrue(any("rice" in item["canonical_name"] for item in payload["items"]))
 
+    def make_request_with_cookie(self, session_token: str) -> Request:
+        return Request({
+            "type": "http",
+            "headers": [(b"cookie", "nutrisight_session={0}".format(session_token).encode())],
+            "path": "/",
+        })
+
+    def test_llm_chat_allows_default_user(self) -> None:
+        """AI suggestions should work for the default (system) user."""
+        request = self.make_request()
+        with patch("app.services.LMStudioClient") as MockClient:
+            mock_instance = MockClient.return_value
+            mock_instance._post_json.return_value = {
+                "choices": [{"message": {"content": "[]"}}]
+            }
+            response = asyncio.run(
+                main.llm_chat_proxy(request)
+            )
+        # Should not be 401 — default user is allowed
+        self.assertNotEqual(response.status_code, 401)
+
+    def test_llm_chat_allows_signed_in_user(self) -> None:
+        """AI suggestions should work for signed-in users."""
+        user = db.upsert_user("Test User", "testllm@example.com")
+        session_token = "test-session-token-llm"
+        from datetime import datetime, timedelta, timezone
+        expires = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(timespec="seconds")
+        db.create_user_session(int(user["id"]), session_token, expires)
+
+        request = self.make_request_with_cookie(session_token)
+        with patch("app.services.LMStudioClient") as MockClient:
+            mock_instance = MockClient.return_value
+            mock_instance._post_json.return_value = {
+                "choices": [{"message": {"content": "[]"}}]
+            }
+            response = asyncio.run(
+                main.llm_chat_proxy(request)
+            )
+        self.assertNotEqual(response.status_code, 401)
+
+    def test_llm_chat_filters_payload_keys(self) -> None:
+        """LLM proxy should strip unexpected keys from the request body."""
+        request = self.make_request()
+        captured_payload = {}
+
+        with patch("app.services.LMStudioClient") as MockClient:
+            mock_instance = MockClient.return_value
+            def capture_post(path, body):
+                captured_payload.update(body)
+                return {"choices": [{"message": {"content": "[]"}}]}
+            mock_instance._post_json.side_effect = capture_post
+
+            # Inject a dangerous key
+            with patch.object(request, "json", return_value={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "hello"}],
+                "temperature": 0.7,
+                "dangerous_key": "should be stripped",
+                "api_key": "should also be stripped",
+            }):
+                response = asyncio.run(main.llm_chat_proxy(request))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("model", captured_payload)
+        self.assertIn("messages", captured_payload)
+        self.assertIn("temperature", captured_payload)
+        self.assertNotIn("dangerous_key", captured_payload)
+        self.assertNotIn("api_key", captured_payload)
+
 
 if __name__ == "__main__":
     unittest.main()

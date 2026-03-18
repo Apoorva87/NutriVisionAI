@@ -1,234 +1,240 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NutriSight Admin</title>
-  <link rel="stylesheet" href="/static/styles.css" />
-</head>
-<body>
-  <main class="shell">
-    <nav class="quick-nav" aria-label="Admin navigation">
-      <a href="/">Logger</a>
-      <a href="/history">History</a>
-      <a href="/admin/db">DB Portal</a>
-      <a href="/admin/users">Users</a>
-    </nav>
+{% extends "base.html" %}
+{% block title %}DB Portal — NutriSight{% endblock %}
+{% block head %}
+<style>
+  .page { max-width: 900px; }
+  @media (min-width: 1024px) { .page { max-width: 1100px; } }
 
-    <section class="hero">
-      <div>
-        <p class="eyebrow">Admin</p>
-        <h1>Database Portal</h1>
-        <p class="lede">Search and maintain the nutrition master catalog on the server. Meals below are shown for <strong>{{ user_name }}</strong> ({{ current_user.email }}).</p>
-      </div>
-      <div class="dashboard-card">
-        <p class="card-label">Database Overview</p>
-        <div class="macro-grid">
-          <div><span>{{ db_overview.nutrition_item_count }}</span><small>foods</small></div>
-          <div><span>{{ db_overview.nutrition_source_count }}</span><small>sources</small></div>
-          <div><span>{{ db_overview.nutrition_alias_count }}</span><small>aliases</small></div>
-        </div>
-        <div class="settings-mini">
-          <div>
-            <span>User meals</span>
-            <strong>{{ db_overview.meal_count }}</strong>
-          </div>
-          <div>
-            <span>Meal items</span>
-            <strong>{{ db_overview.meal_item_count }}</strong>
-          </div>
-        </div>
-      </div>
-    </section>
+  .admin-nav { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .admin-nav a {
+    padding: 6px 14px; border-radius: var(--radius-pill);
+    background: var(--panel); border: 1px solid var(--line);
+    color: var(--text); text-decoration: none; font-size: 0.85rem;
+  }
+  .admin-nav a.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-    {% if message %}
-    <section class="panel status-panel">
-      <p class="status status-strong">{{ message }}</p>
-    </section>
-    {% endif %}
+  .overview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .overview-stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; text-align: center; }
+  .overview-stat strong { display: block; font-size: 1.4rem; color: var(--accent); }
+  .overview-stat small { color: var(--muted); font-size: 0.8rem; }
 
-    <section class="admin-grid">
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Master Controls</p>
-            <h2>{% if edit_item %}Edit nutrition item{% else %}Add nutrition item{% endif %}</h2>
-          </div>
-        </div>
-        <form class="stack" method="post" action="/admin/nutrition-items">
-          <input type="hidden" name="item_id" value="{{ edit_item.id if edit_item else 0 }}" />
-          <input type="hidden" name="q" value="{{ query }}" />
-          <div class="settings-form-grid settings-form-grid-wide">
-            <label class="field">
-              <span>Canonical name</span>
-              <input name="canonical_name" type="text" value="{{ edit_item.canonical_name if edit_item else '' }}" required />
-            </label>
-            <label class="field">
-              <span>Source key</span>
-              <input name="primary_source_key" type="text" value="{{ edit_item.primary_source_key if edit_item else '' }}" placeholder="usda_fdc_foundation" />
-            </label>
-          </div>
-          <div class="settings-form-grid">
-            <label class="field">
-              <span>Serving grams</span>
-              <input name="serving_grams" type="number" min="1" step="0.1" value="{{ edit_item.serving_grams if edit_item else '' }}" required />
-            </label>
-            <label class="field">
-              <span>Calories</span>
-              <input name="calories" type="number" min="0" step="0.1" value="{{ edit_item.calories if edit_item else '' }}" required />
-            </label>
-            <label class="field">
-              <span>Protein g</span>
-              <input name="protein_g" type="number" min="0" step="0.1" value="{{ edit_item.protein_g if edit_item else '' }}" required />
-            </label>
-            <label class="field">
-              <span>Carbs g</span>
-              <input name="carbs_g" type="number" min="0" step="0.1" value="{{ edit_item.carbs_g if edit_item else '' }}" required />
-            </label>
-          </div>
-          <div class="settings-form-grid settings-form-grid-wide">
-            <label class="field">
-              <span>Fat g</span>
-              <input name="fat_g" type="number" min="0" step="0.1" value="{{ edit_item.fat_g if edit_item else '' }}" required />
-            </label>
-            <label class="field">
-              <span>Source label</span>
-              <input name="source_label" type="text" value="{{ edit_item.source_label if edit_item else '' }}" placeholder="Rice, white, cooked" />
-            </label>
-          </div>
-          <label class="field">
-            <span>Source reference</span>
-            <input name="source_reference" type="text" value="{{ edit_item.source_reference if edit_item else '' }}" placeholder="USDA FoodData Central" />
-          </label>
-          <label class="field">
-            <span>Notes</span>
-            <textarea name="source_notes" rows="4" placeholder="Optional notes">{{ edit_item.source_notes if edit_item else '' }}</textarea>
-          </label>
-          <div class="save-bar">
-            <a class="button-link secondary-link" href="/admin/db">Reset</a>
-            <button type="submit" class="button">{% if edit_item %}Update item{% else %}Create item{% endif %}</button>
-          </div>
-        </form>
-      </section>
+  .admin-section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+  .admin-section h2 { font-size: 1rem; margin: 0 0 12px; }
+  .admin-section .eyebrow { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 4px; }
 
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Label Import</p>
-            <h2>Nutrition label to DB</h2>
-          </div>
+  .admin-two-col { display: grid; gap: 16px; }
+  @media (min-width: 768px) { .admin-two-col { grid-template-columns: 1fr 1fr; } }
+
+  .admin-search { display: flex; gap: 8px; margin-bottom: 12px; }
+  .admin-search input { flex: 1; }
+
+  .item-card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin-bottom: 8px; }
+  .item-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+  .item-card-head strong { font-size: 0.95rem; }
+  .item-card-meta { color: var(--muted); font-size: 0.8rem; margin-top: 4px; }
+  .item-card-macros { display: flex; gap: 12px; margin-top: 6px; font-size: 0.85rem; }
+  .item-card-macros span { color: var(--muted); }
+  .item-card-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .item-card-actions a, .item-card-actions button {
+    padding: 4px 10px; font-size: 0.8rem; border-radius: var(--radius);
+    text-decoration: none; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  }
+  .item-card-actions .danger { color: #c0392b; border-color: #e6b0aa; }
+
+  .source-card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; margin-bottom: 6px; }
+  .source-card strong { font-size: 0.9rem; }
+  .source-card p { margin: 2px 0 0; font-size: 0.8rem; color: var(--muted); }
+
+  .meal-row-admin { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); gap: 8px; }
+  .meal-row-admin:last-child { border-bottom: none; }
+  .meal-row-admin strong { font-size: 0.9rem; }
+  .meal-row-admin .meal-meta { font-size: 0.8rem; color: var(--muted); }
+  .meal-row-admin .meal-nums { text-align: right; font-size: 0.85rem; white-space: nowrap; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  @media (min-width: 600px) { .form-grid-3 { grid-template-columns: 1fr 1fr 1fr; } }
+
+  .save-bar { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+  .save-bar a { padding: 8px 14px; text-decoration: none; color: var(--muted); font-size: 0.9rem; }
+
+  .items-scroll { max-height: 600px; overflow-y: auto; }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav class="admin-nav">
+  <a href="/">Home</a>
+  <a href="/admin/db" class="active">DB Portal</a>
+  <a href="/admin/users">Users</a>
+  <a href="/settings">Settings</a>
+</nav>
+
+<h1 class="mb-8">Database Portal</h1>
+<p class="small muted mb-16">Nutrition catalog for <strong>{{ user_name }}</strong> ({{ current_user.email }})</p>
+
+<!-- Overview -->
+<div class="overview-grid">
+  <div class="overview-stat"><strong>{{ db_overview.nutrition_item_count }}</strong><small>Foods</small></div>
+  <div class="overview-stat"><strong>{{ db_overview.nutrition_source_count }}</strong><small>Sources</small></div>
+  <div class="overview-stat"><strong>{{ db_overview.nutrition_alias_count }}</strong><small>Aliases</small></div>
+  <div class="overview-stat"><strong>{{ db_overview.meal_count }}</strong><small>Meals</small></div>
+  <div class="overview-stat"><strong>{{ db_overview.meal_item_count }}</strong><small>Meal items</small></div>
+  <div class="overview-stat"><strong>{{ db_overview.custom_food_count }}</strong><small>Custom foods</small></div>
+</div>
+
+{% if message %}
+<div class="card mb-16" style="border-left: 3px solid var(--accent); padding: 10px 14px;">
+  <p>{{ message }}</p>
+</div>
+{% endif %}
+
+<div class="admin-two-col">
+  <!-- Add/Edit form -->
+  <div>
+    <div class="admin-section">
+      <p class="eyebrow">Master Controls</p>
+      <h2>{% if edit_item %}Edit nutrition item{% else %}Add nutrition item{% endif %}</h2>
+      <form class="stack" method="post" action="/admin/nutrition-items">
+        <input type="hidden" name="item_id" value="{{ edit_item.id if edit_item else 0 }}" />
+        <input type="hidden" name="q" value="{{ query }}" />
+        <div class="form-grid">
+          <label class="field"><span>Canonical name</span>
+            <input name="canonical_name" type="text" value="{{ edit_item.canonical_name if edit_item else '' }}" required />
+          </label>
+          <label class="field"><span>Source key</span>
+            <input name="primary_source_key" type="text" value="{{ edit_item.primary_source_key if edit_item else '' }}" placeholder="usda_fdc_foundation" />
+          </label>
         </div>
-        <form class="stack" method="post" action="/admin/label-import" enctype="multipart/form-data">
-          <label class="field">
-            <span>Custom name</span>
-            <input type="text" name="custom_name" placeholder="Protein bar chocolate" required />
+        <div class="form-grid form-grid-3">
+          <label class="field"><span>Serving (g)</span>
+            <input name="serving_grams" type="number" min="1" step="0.1" value="{{ edit_item.serving_grams if edit_item else '' }}" required />
           </label>
-          <label class="field upload">
-            <span>Nutrition label photo</span>
-            <input type="file" name="image" accept="image/*" capture="environment" required />
-            <p class="field-help">Use a front-facing label photo with calories, protein, carbs, fat, and serving size visible.</p>
+          <label class="field"><span>Calories</span>
+            <input name="calories" type="number" min="0" step="0.1" value="{{ edit_item.calories if edit_item else '' }}" required />
           </label>
-          <label class="field">
-            <span>Save into</span>
+          <label class="field"><span>Protein (g)</span>
+            <input name="protein_g" type="number" min="0" step="0.1" value="{{ edit_item.protein_g if edit_item else '' }}" required />
+          </label>
+        </div>
+        <div class="form-grid form-grid-3">
+          <label class="field"><span>Carbs (g)</span>
+            <input name="carbs_g" type="number" min="0" step="0.1" value="{{ edit_item.carbs_g if edit_item else '' }}" required />
+          </label>
+          <label class="field"><span>Fat (g)</span>
+            <input name="fat_g" type="number" min="0" step="0.1" value="{{ edit_item.fat_g if edit_item else '' }}" required />
+          </label>
+          <label class="field"><span>Source label</span>
+            <input name="source_label" type="text" value="{{ edit_item.source_label if edit_item else '' }}" placeholder="Rice, white, cooked" />
+          </label>
+        </div>
+        <label class="field"><span>Source reference</span>
+          <input name="source_reference" type="text" value="{{ edit_item.source_reference if edit_item else '' }}" placeholder="USDA FoodData Central" />
+        </label>
+        <label class="field"><span>Notes</span>
+          <textarea name="source_notes" rows="2" placeholder="Optional notes">{{ edit_item.source_notes if edit_item else '' }}</textarea>
+        </label>
+        <div class="save-bar">
+          <a href="/admin/db">Reset</a>
+          <button type="submit">{% if edit_item %}Update item{% else %}Create item{% endif %}</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Label import -->
+    <div class="admin-section">
+      <p class="eyebrow">Label Import</p>
+      <h2>Nutrition label to DB</h2>
+      <form class="stack" method="post" action="/admin/label-import" enctype="multipart/form-data">
+        <label class="field"><span>Custom name</span>
+          <input type="text" name="custom_name" placeholder="Protein bar chocolate" required />
+        </label>
+        <label class="field"><span>Nutrition label photo</span>
+          <input type="file" name="image" accept="image/*" capture="environment" required />
+        </label>
+        <div class="form-grid">
+          <label class="field"><span>Save into</span>
             <select name="target_scope">
               <option value="global">Master DB</option>
               <option value="user">My custom foods</option>
             </select>
           </label>
-          <button type="submit" class="button">Import label</button>
-        </form>
-      </section>
+          <div style="display:flex;align-items:flex-end;"><button type="submit">Import</button></div>
+        </div>
+      </form>
+    </div>
+  </div>
 
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Catalog</p>
-            <h2>Search nutrition items</h2>
-          </div>
-        </div>
-        <form class="admin-search" method="get" action="/admin/db">
-          <input name="q" type="text" value="{{ query }}" placeholder="Search name, source label, source key" />
-          <button type="submit" class="secondary">Search</button>
-        </form>
-        <div class="stack">
-          {% for item in nutrition_items %}
-          <article class="admin-card">
-            <div class="admin-card-header">
-              <div>
-                <strong>{{ item.canonical_name }}</strong>
-                <p>{{ item.calories }} kcal / {{ item.serving_grams }} g</p>
-              </div>
-              <div class="admin-actions">
-                <a class="button-link" href="/admin/db?edit_id={{ item.id }}{% if query %}&q={{ query }}{% endif %}">Edit</a>
-                <form method="post" action="/admin/nutrition-items/{{ item.id }}/delete">
-                  <input type="hidden" name="q" value="{{ query }}" />
-                  <button type="submit" class="secondary danger">Delete</button>
-                </form>
-              </div>
-            </div>
-            <div class="detail-stats admin-stats">
-              <div><span>Protein</span><strong>{{ item.protein_g }}</strong></div>
-              <div><span>Carbs</span><strong>{{ item.carbs_g }}</strong></div>
-              <div><span>Fat</span><strong>{{ item.fat_g }}</strong></div>
-            </div>
-            <p class="admin-meta">
-              Source: <strong>{{ item.primary_source_key or 'manual' }}</strong>
-              {% if item.source_label %} · {{ item.source_label }}{% endif %}
-            </p>
-          </article>
-          {% else %}
-          <div class="empty-state">No nutrition items matched this search.</div>
-          {% endfor %}
-        </div>
-      </section>
-    </section>
-
-    <section class="admin-grid">
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Sources</p>
-            <h2>Registered source catalogs</h2>
-          </div>
-        </div>
-        <div class="stack">
-          {% for source in nutrition_sources %}
-          <article class="admin-card">
-            <strong>{{ source.source_key }}</strong>
-            <p>{{ source.source_name }}</p>
-            <p class="admin-meta">{{ source.region or 'Unknown region' }}{% if source.source_url %} · <a href="{{ source.source_url }}" target="_blank" rel="noreferrer">reference</a>{% endif %}</p>
-          </article>
-          {% else %}
-          <div class="empty-state">No nutrition sources loaded yet.</div>
-          {% endfor %}
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <p class="eyebrow">Meals</p>
-            <h2>Recent stored meals</h2>
-          </div>
-        </div>
-        <div class="meal-list">
-          {% for meal in recent_meals %}
-          <article class="meal-row">
+  <!-- Right column: search + results -->
+  <div>
+    <div class="admin-section">
+      <p class="eyebrow">Catalog</p>
+      <h2>Search nutrition items</h2>
+      <form class="admin-search" method="get" action="/admin/db">
+        <input name="q" type="text" value="{{ query }}" placeholder="Search by name, source..." />
+        <button type="submit" class="btn-secondary">Search</button>
+      </form>
+      <div class="items-scroll">
+        {% for item in nutrition_items %}
+        <div class="item-card">
+          <div class="item-card-head">
             <div>
-              <strong>{{ meal.meal_name }}</strong>
-              <p>{{ meal.created_at }}</p>
+              <strong>{{ item.canonical_name }}</strong>
+              <div class="item-card-meta">{{ item.calories }} kcal / {{ item.serving_grams }}g &middot; {{ item.primary_source_key or 'manual' }}{% if item.source_label %} &middot; {{ item.source_label }}{% endif %}</div>
             </div>
-            <div class="meal-macros">
-              <span>{{ meal.total_calories }} kcal</span>
-              <span>P {{ meal.total_protein_g }} / C {{ meal.total_carbs_g }} / F {{ meal.total_fat_g }}</span>
+            <div class="item-card-actions">
+              <a href="/admin/db?edit_id={{ item.id }}{% if query %}&q={{ query }}{% endif %}">Edit</a>
+              <form method="post" action="/admin/nutrition-items/{{ item.id }}/delete" style="margin:0;">
+                <input type="hidden" name="q" value="{{ query }}" />
+                <button type="submit" class="danger">Del</button>
+              </form>
             </div>
-          </article>
-          {% else %}
-          <div class="empty-state">No meals saved for this user yet.</div>
-          {% endfor %}
+          </div>
+          <div class="item-card-macros">
+            <span>P <strong>{{ item.protein_g }}</strong></span>
+            <span>C <strong>{{ item.carbs_g }}</strong></span>
+            <span>F <strong>{{ item.fat_g }}</strong></span>
+          </div>
         </div>
-      </section>
-    </section>
-  </main>
-</body>
-</html>
+        {% else %}
+        <div class="empty-state">No items matched.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Sources + Recent meals -->
+<div class="admin-two-col">
+  <div class="admin-section">
+    <p class="eyebrow">Sources</p>
+    <h2>Registered catalogs</h2>
+    {% for source in nutrition_sources %}
+    <div class="source-card">
+      <strong>{{ source.source_key }}</strong> — {{ source.source_name }}
+      <p>{{ source.region or 'Unknown region' }}{% if source.source_url %} &middot; <a href="{{ source.source_url }}" target="_blank" rel="noreferrer">ref</a>{% endif %}</p>
+    </div>
+    {% else %}
+    <div class="empty-state">No sources loaded.</div>
+    {% endfor %}
+  </div>
+
+  <div class="admin-section">
+    <p class="eyebrow">Meals</p>
+    <h2>Recent meals</h2>
+    {% for meal in recent_meals %}
+    <div class="meal-row-admin">
+      <div>
+        <strong>{{ meal.meal_name }}</strong>
+        <div class="meal-meta">{{ meal.created_at }}</div>
+      </div>
+      <div class="meal-nums">
+        {{ meal.total_calories | round(0) | int }} kcal<br>
+        <span class="meal-meta">P{{ meal.total_protein_g | round(0) | int }} C{{ meal.total_carbs_g | round(0) | int }} F{{ meal.total_fat_g | round(0) | int }}</span>
+      </div>
+    </div>
+    {% else %}
+    <div class="empty-state">No meals yet.</div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

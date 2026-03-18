@@ -3,7 +3,7 @@ import secrets
 import sqlite3
 import shutil
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 from typing import Any, Dict, List, Optional
@@ -61,17 +61,21 @@ from app.services import (
 )
 
 
-app = FastAPI(title="NutriSight")
+from contextlib import asynccontextmanager
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db(DATA_DIR / "nutrition_seed.json")
+    yield
+
+
+app = FastAPI(title="NutriSight", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 templates = Jinja2Templates(directory="app/templates")
 SESSION_COOKIE_NAME = "nutrisight_session"
 SESSION_DAYS = 30
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    init_db(DATA_DIR / "nutrition_seed.json")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -232,14 +236,16 @@ def current_user_name(settings: Dict[str, Any]) -> str:
 
 def resolve_current_user(request: Request) -> Dict[str, Any]:
     default_user = fetch_user_by_email("default@local.nutrisight")
+    if not default_user:
+        default_user = {"id": 0, "name": "Default User", "email": "default@local.nutrisight", "is_system": 1}
     session_token = request.cookies.get(SESSION_COOKIE_NAME)
     if not session_token:
         return default_user
     session = fetch_session(session_token)
     if not session:
         return default_user
-    expires_at = datetime.fromisoformat(session["expires_at"])
-    if expires_at < datetime.utcnow():
+    expires_at = datetime.fromisoformat(session["expires_at"]).replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
         delete_session(session_token)
         return default_user
     user = fetch_user_by_id(int(session["user_id"]))
@@ -510,12 +516,17 @@ async def save_settings(
 @app.post("/api/llm/chat")
 async def llm_chat_proxy(request: Request) -> JSONResponse:
     """Proxy chat requests to LM Studio to avoid browser CORS issues."""
+    current_user = resolve_current_user(request)
+    if not current_user:
+        return JSONResponse({"error": "Sign in to use AI features."}, status_code=401)
     settings = fetch_settings()
     base_url = settings.get("lmstudio_base_url", "http://localhost:1234").rstrip("/")
     try:
         body = await request.json()
     except Exception:
         return JSONResponse({"error": "Invalid JSON."}, status_code=400)
+    allowed_keys = {"model", "messages", "temperature"}
+    body = {k: v for k, v in body.items() if k in allowed_keys}
     try:
         from app.services import LMStudioClient
         client = LMStudioClient(base_url, timeout_seconds=30.0)
@@ -527,14 +538,19 @@ async def llm_chat_proxy(request: Request) -> JSONResponse:
 
 @app.post("/auth/session")
 async def create_auth_session(
+    request: Request,
     name: str = Form(...),
     email: str = Form(...),
 ) -> RedirectResponse:
-    payload = AuthPayload(name=name, email=email)
+    try:
+        payload = AuthPayload(name=name, email=email)
+    except Exception:
+        return root_redirect(message="Invalid name or email address.")
     user = upsert_user(payload.name, payload.email)
     session_token = secrets.token_urlsafe(32)
-    expires_at = (datetime.utcnow() + timedelta(days=SESSION_DAYS)).isoformat(timespec="seconds")
+    expires_at = (datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)).isoformat(timespec="seconds")
     create_user_session(int(user["id"]), session_token, expires_at)
+    is_https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
     response = root_redirect(message="Signed in as {0}.".format(user["name"]))
     response.set_cookie(
         SESSION_COOKIE_NAME,
@@ -542,6 +558,7 @@ async def create_auth_session(
         max_age=SESSION_DAYS * 24 * 60 * 60,
         httponly=True,
         samesite="lax",
+        secure=is_https,
     )
     return response
 

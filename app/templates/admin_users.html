@@ -1,70 +1,76 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>NutriSight Users</title>
-  <link rel="stylesheet" href="/static/styles.css" />
-</head>
-<body>
-  <main class="shell">
-    <nav class="quick-nav" aria-label="Admin navigation">
-      <a href="/">Logger</a>
-      <a href="/history">History</a>
-      <a href="/admin/db">DB Portal</a>
-      <a href="/admin/users">Users</a>
-    </nav>
+{% extends "base.html" %}
+{% block title %}Users — NutriSight{% endblock %}
+{% block head %}
+<style>
+  .page { max-width: 900px; }
 
-    {% if message %}
-    <section class="panel status-panel">
-      <p class="status status-strong">{{ message }}</p>
-    </section>
-    {% endif %}
+  .admin-nav { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .admin-nav a {
+    padding: 6px 14px; border-radius: var(--radius-pill);
+    background: var(--panel); border: 1px solid var(--line);
+    color: var(--text); text-decoration: none; font-size: 0.85rem;
+  }
+  .admin-nav a.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-    <section class="hero">
-      <div>
-        <p class="eyebrow">Admin</p>
-        <h1>Registered Users</h1>
-        <p class="lede">User registrations, email identities, and how much history is stored for each account.</p>
-      </div>
-      <div class="dashboard-card">
-        <p class="card-label">Current Admin Session</p>
-        <p class="metric">{{ current_user.name }}</p>
-        <p class="submetric">{{ current_user.email }}</p>
-      </div>
-    </section>
+  .current-user-badge { display: inline-flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 14px; margin-bottom: 20px; font-size: 0.9rem; }
+  .current-user-badge strong { color: var(--accent); }
 
-    <section class="panel">
-      <div class="panel-header">
-        <div>
-          <p class="eyebrow">Users</p>
-          <h2>User directory</h2>
-        </div>
-      </div>
-      <div class="stack">
-        {% for user in users %}
-        <article class="admin-card">
-          <div class="admin-card-header">
-            <div>
-              <strong>{{ user.name }}</strong>
-              <p class="admin-meta">{{ user.email }}</p>
-            </div>
-            {% if user.is_system %}
-            <span class="pill">system</span>
-            {% endif %}
-          </div>
-          <div class="detail-stats admin-stats">
-            <div><span>Meals</span><strong>{{ user.meal_count }}</strong></div>
-            <div><span>History points</span><strong>{{ user.history_point_count }}</strong></div>
-            <div><span>Custom foods</span><strong>{{ user.custom_food_count }}</strong></div>
-          </div>
-          <p class="admin-meta">Created {{ user.created_at }} · Last seen {{ user.last_seen_at }}</p>
-        </article>
-        {% else %}
-        <div class="empty-state">No registered users yet.</div>
-        {% endfor %}
-      </div>
-    </section>
-  </main>
-</body>
-</html>
+  .user-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px; margin-bottom: 10px;
+  }
+  .user-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .user-card-head strong { font-size: 1rem; }
+  .user-card-email { color: var(--muted); font-size: 0.85rem; }
+  .user-card-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .user-stat { background: var(--bg); border-radius: var(--radius); padding: 8px; text-align: center; }
+  .user-stat strong { display: block; font-size: 1.1rem; color: var(--accent); }
+  .user-stat small { color: var(--muted); font-size: 0.78rem; }
+  .user-card-dates { color: var(--muted); font-size: 0.78rem; margin-top: 8px; }
+  .pill-system { display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill); background: var(--line); font-size: 0.75rem; color: var(--muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+<nav class="admin-nav">
+  <a href="/">Home</a>
+  <a href="/admin/db">DB Portal</a>
+  <a href="/admin/users" class="active">Users</a>
+  <a href="/settings">Settings</a>
+</nav>
+
+<h1 class="mb-8">User Management</h1>
+<p class="small muted mb-16">Registered users, activity stats, and session history.</p>
+
+<div class="current-user-badge">
+  Logged in as <strong>{{ current_user.name }}</strong> &middot; {{ current_user.email }}
+</div>
+
+{% if message %}
+<div class="card mb-16" style="border-left: 3px solid var(--accent); padding: 10px 14px;">
+  <p>{{ message }}</p>
+</div>
+{% endif %}
+
+{% for user in users %}
+<div class="user-card">
+  <div class="user-card-head">
+    <div>
+      <strong>{{ user.name }}</strong>
+      {% if user.is_system %}<span class="pill-system">system</span>{% endif %}
+      <div class="user-card-email">{{ user.email }}</div>
+    </div>
+  </div>
+  <div class="user-card-stats">
+    <div class="user-stat"><strong>{{ user.meal_count }}</strong><small>Meals</small></div>
+    <div class="user-stat"><strong>{{ user.history_point_count }}</strong><small>Days logged</small></div>
+    <div class="user-stat"><strong>{{ user.custom_food_count }}</strong><small>Custom foods</small></div>
+  </div>
+  <div class="user-card-dates">
+    Created {{ user.created_at }} &middot; Last seen {{ user.last_seen_at }}
+  </div>
+</div>
+{% else %}
+<div class="empty-state">No registered users yet.</div>
+{% endfor %}
+{% endblock %}

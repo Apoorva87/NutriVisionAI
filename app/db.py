@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -10,6 +10,8 @@ from app.config import DB_PATH, DEFAULT_CALORIE_GOAL, DEFAULT_MACRO_GOALS
 def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -154,7 +156,7 @@ def init_db(seed_path: Path) -> None:
         "calorie_goal": DEFAULT_CALORIE_GOAL,
         "macro_goals": DEFAULT_MACRO_GOALS,
         "current_user_name": "default",
-        "model_provider": "stub",
+        "model_provider": "lmstudio",
         "portion_estimation_style": "grams_with_range",
         "lmstudio_base_url": "http://localhost:1234",
         "lmstudio_vision_model": "qwen/qwen3-vl-8b",
@@ -165,6 +167,11 @@ def init_db(seed_path: Path) -> None:
             "INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)",
             (key, json.dumps(value)),
         )
+    # Migrate existing databases from stub default to lmstudio
+    cur.execute(
+        "UPDATE settings SET value = ? WHERE key = 'model_provider' AND value = ?",
+        (json.dumps("lmstudio"), json.dumps("stub")),
+    )
 
     timestamp = _now_iso()
     cur.execute(
@@ -181,7 +188,14 @@ def init_db(seed_path: Path) -> None:
     conn.close()
 
 
+_ALLOWED_TABLES = {"meals", "nutrition_items", "users", "user_sessions", "custom_foods", "meal_items"}
+
+
 def ensure_column(cur: sqlite3.Cursor, table: str, column: str, definition: str) -> None:
+    if table not in _ALLOWED_TABLES:
+        raise ValueError("Disallowed table in ensure_column: {0}".format(table))
+    if not column.isidentifier():
+        raise ValueError("Invalid column name in ensure_column: {0}".format(column))
     columns = [row[1] for row in cur.execute("PRAGMA table_info({0})".format(table)).fetchall()]
     if column not in columns:
         cur.execute("ALTER TABLE {0} ADD COLUMN {1} {2}".format(table, column, definition))
@@ -210,7 +224,7 @@ def update_settings(values: Dict[str, Any]) -> None:
 
 
 def _now_iso() -> str:
-    return datetime.utcnow().isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _catalog_payload(payload: Any) -> Dict[str, List[Dict[str, Any]]]:
@@ -491,6 +505,14 @@ def search_nutrition_items() -> List[Dict[str, Any]]:
     rows = conn.execute("SELECT * FROM nutrition_items ORDER BY canonical_name").fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+def search_nutrition_names() -> List[str]:
+    """Return only canonical names (lightweight alternative for fuzzy matching)."""
+    conn = get_connection()
+    rows = conn.execute("SELECT canonical_name FROM nutrition_items ORDER BY canonical_name").fetchall()
+    conn.close()
+    return [row["canonical_name"] for row in rows]
 
 
 def search_nutrition_items_filtered(query: str = "", limit: int = 50) -> List[Dict[str, Any]]:
