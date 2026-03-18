@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>{% block title %}NutriSight{% endblock %}</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css?v=2" />
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -39,11 +39,9 @@
     </a>
   </nav>
 
-  {% block overlays %}{% endblock %}
-
   <div id="toast-container" class="toast-container"></div>
 
-  <script src="/static/shared.js"></script>
+  <script src="/static/shared.js?v=2"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
