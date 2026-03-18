@@ -1162,10 +1162,13 @@ label.field > span {
   position: fixed;
   bottom: calc(var(--tab-height) + var(--safe-bottom) + 12px);
   right: 16px;
-  z-index: 50;
+  left: auto;
+  z-index: 51;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  width: auto;
+  min-height: 0;
   padding: 10px 16px;
   border: none;
   border-radius: var(--radius-pill);
@@ -1176,12 +1179,13 @@ label.field > span {
   cursor: pointer;
   box-shadow: 0 2px 12px rgba(0,0,0,0.18);
 }
+.ai-help-fab:hover { background: var(--accent-dark); }
 .ai-help-fab:active { transform: scale(0.96); }
 .ai-help-fab.is-open { display: none; }
 
 .ai-help-sheet {
   position: fixed;
-  bottom: var(--tab-height);
+  bottom: calc(var(--tab-height) + var(--safe-bottom));
   left: 0;
   right: 0;
   z-index: 55;
@@ -1192,7 +1196,7 @@ label.field > span {
   border-top: 1px solid var(--line);
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -4px 24px rgba(0,0,0,0.12);
-  padding: 0 0 var(--safe-bottom);
+  padding: 0 0 8px;
   animation: sheetSlideUp 0.25s ease-out;
 }
 .ai-help-sheet.hidden { display: none; }
@@ -1227,9 +1231,16 @@ label.field > span {
   padding: 6px 12px;
 }
 .ai-help-input-row button {
+  width: auto;
+  min-height: 38px;
   padding: 6px 14px;
   font-size: 0.84rem;
   white-space: nowrap;
+}
+
+.ai-help-header-actions button {
+  width: auto;
+  min-height: 0;
 }
 
 .ai-help-web-toggle {
@@ -1291,6 +1302,8 @@ label.field > span {
 
 .ai-result-actions { display: flex; gap: 6px; }
 .ai-result-actions button {
+  width: auto;
+  min-height: 0;
   padding: 5px 12px;
   font-size: 0.8rem;
   border-radius: var(--radius);
@@ -1306,14 +1319,12 @@ label.field > span {
   .ai-help-sheet {
     max-width: 480px;
     left: 50%;
+    right: auto;
+    width: 100%;
     transform: translateX(-50%);
   }
   .ai-help-fab {
     right: calc(50% - 240px + 16px);
-  }
-  @keyframes sheetSlideUp {
-    from { transform: translate(-50%, 100%); }
-    to { transform: translate(-50%, 0); }
   }
 }
 
