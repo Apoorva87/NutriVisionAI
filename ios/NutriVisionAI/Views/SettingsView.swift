@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @StateObject private var analysisService = FoodAnalysisService.shared
     @State private var settings: SettingsResponse?
     @State private var isLoading = true
     @State private var isSaving = false
@@ -65,6 +66,38 @@ struct SettingsView: View {
                     Text("Account")
                 } footer: {
                     Text("Sign in to sync your data across devices")
+                }
+                
+                // Analysis Provider Section
+                Section {
+                    ForEach(analysisService.availableProviders) { provider in
+                        Button {
+                            analysisService.currentProvider = provider
+                        } label: {
+                            HStack {
+                                Image(systemName: provider.systemImage)
+                                    .frame(width: 24)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(provider.rawValue)
+                                        .foregroundStyle(.primary)
+                                    Text(provider.description)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if analysisService.currentProvider == provider {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.accentColor)
+                                }
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Image Analysis")
+                } footer: {
+                    if analysisService.availableProviders.count == 1 {
+                        Text("Apple Foundation Models requires iOS 26+ and is only available in the AppleAI build configuration.")
+                    }
                 }
                 
                 // Nutrition Goals Section

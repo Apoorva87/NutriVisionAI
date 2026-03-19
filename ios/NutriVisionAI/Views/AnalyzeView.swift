@@ -2,6 +2,7 @@ import SwiftUI
 import PhotosUI
 
 struct AnalyzeView: View {
+    @StateObject private var analysisService = FoodAnalysisService.shared
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var capturedImage: UIImage?
     @State private var analysisResult: AnalysisResponse?
@@ -12,6 +13,7 @@ struct AnalyzeView: View {
     @State private var mealName = ""
     @State private var isSaving = false
     @State private var showSuccessAlert = false
+    @State private var showProviderPicker = false
     
     private var totalCalories: Double {
         editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.calories }
@@ -66,6 +68,26 @@ struct AnalyzeView: View {
                 }
             }
             .navigationTitle("Scan")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        ForEach(analysisService.availableProviders) { provider in
+                            Button {
+                                analysisService.currentProvider = provider
+                            } label: {
+                                HStack {
+                                    Label(provider.rawValue, systemImage: provider.systemImage)
+                                    if analysisService.currentProvider == provider {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Provider", systemImage: analysisService.currentProvider.systemImage)
+                    }
+                }
+            }
             .fullScreenCover(isPresented: $showCamera) {
                 CameraView(image: $capturedImage)
                     .ignoresSafeArea()
@@ -88,14 +110,14 @@ struct AnalyzeView: View {
     }
     
     private func performAnalysis() async {
-        guard let image = capturedImage,
-              let imageData = image.jpegData(compressionQuality: 0.8) else { return }
+        guard let image = capturedImage else { return }
         
         isAnalyzing = true
         errorMessage = nil
         
         do {
-            let result = try await APIClient.shared.analyzeImage(data: imageData, filename: "meal.jpg")
+            // Use the abstracted analysis service (backend or Apple Foundation Models)
+            let result = try await analysisService.analyzeImage(image)
             analysisResult = result
             editableItems = result.items.map { EditableAnalysisItem(item: $0) }
             

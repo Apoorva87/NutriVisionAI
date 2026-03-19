@@ -220,7 +220,7 @@ struct AnalysisItem: Codable, Identifiable {
 }
 
 struct AnalysisResponse: Codable {
-    let imagePath: String
+    let imagePath: String?  // Optional for on-device analysis
     let items: [AnalysisItem]
     let totals: NutritionTotals
     let providerMetadata: [String: String]
