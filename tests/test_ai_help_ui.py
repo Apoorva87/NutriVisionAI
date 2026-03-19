@@ -125,7 +125,7 @@ def mock_llm_route(page, response_body: dict):
             content_type="application/json",
             body=json.dumps(response_body),
         )
-    page.route("**/api/ai-food-lookup", handler)
+    page.route("**/api/v1/llm/food-lookup", handler)
 
 
 def mock_save_route(page, response_body=None):
@@ -138,7 +138,7 @@ def mock_save_route(page, response_body=None):
             content_type="application/json",
             body=json.dumps(response_body or {"ok": True, "item_id": 999, "canonical_name": "test"}),
         )
-    page.route("**/api/ai-food-lookup/save", handler)
+    page.route("**/api/v1/llm/food-lookup/save", handler)
     return captured
 
 
@@ -571,7 +571,7 @@ class TestAiHelpErrorHandling:
                 content_type="application/json",
                 body=json.dumps({"error": "Could not estimate nutrition. Check that AI provider is configured in Settings."}),
             )
-        page.route("**/api/ai-food-lookup", handler)
+        page.route("**/api/v1/llm/food-lookup", handler)
 
         page.click("#ai-help-toggle")
         page.fill("#ai-help-query", "mystery food")
@@ -582,7 +582,7 @@ class TestAiHelpErrorHandling:
         assert "AI provider" in text or "Settings" in text
 
     def test_network_error_shows_message(self, page):
-        page.route("**/api/ai-food-lookup", lambda route: route.abort("connectionrefused"))
+        page.route("**/api/v1/llm/food-lookup", lambda route: route.abort("connectionrefused"))
 
         page.click("#ai-help-toggle")
         page.fill("#ai-help-query", "mystery food")

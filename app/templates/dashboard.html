@@ -7,11 +7,26 @@
 {% if current_user.is_system %}
 <div class="login-banner">
   <p>Sign in so meals stay tied to you</p>
-  <form method="post" action="/auth/session" class="field-row">
+  <form class="field-row" id="login-form">
     <input type="text" name="name" placeholder="Name" required />
     <input type="email" name="email" placeholder="Email" required />
     <button type="submit" class="btn-small">Go</button>
   </form>
+  <script>
+  document.getElementById("login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    try {
+      const res = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fd.get("name"), email: fd.get("email") }),
+      });
+      if (res.ok) { window.location.href = "/"; }
+      else { const d = await res.json(); alert(d.error || "Login failed"); }
+    } catch (err) { alert("Network error"); }
+  });
+  </script>
 </div>
 {% endif %}
 
@@ -335,7 +350,7 @@
     recoRefresh.disabled = true;
 
     try {
-      const res = await fetch("/api/llm/chat", {
+      const res = await fetch("/api/v1/llm/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -371,7 +386,7 @@
       const id = card.dataset.mealId;
       if (!confirm("Delete this meal?")) return;
       try {
-        const res = await fetch("/api/meals/" + id, { method: "DELETE" });
+        const res = await fetch("/api/v1/meals/" + id, { method: "DELETE" });
         if (res.ok) {
           card.remove();
           showToast("Meal deleted");

@@ -94,7 +94,7 @@
     <div class="admin-section">
       <p class="eyebrow">Master Controls</p>
       <h2>{% if edit_item %}Edit nutrition item{% else %}Add nutrition item{% endif %}</h2>
-      <form class="stack" method="post" action="/admin/nutrition-items">
+      <form class="stack" id="nutrition-item-form">
         <input type="hidden" name="item_id" value="{{ edit_item.id if edit_item else 0 }}" />
         <input type="hidden" name="q" value="{{ query }}" />
         <div class="form-grid">
@@ -144,7 +144,7 @@
     <div class="admin-section">
       <p class="eyebrow">Label Import</p>
       <h2>Nutrition label to DB</h2>
-      <form class="stack" method="post" action="/admin/label-import" enctype="multipart/form-data">
+      <form class="stack" id="label-import-form" enctype="multipart/form-data">
         <label class="field"><span>Custom name</span>
           <input type="text" name="custom_name" placeholder="Protein bar chocolate" required />
         </label>
@@ -183,10 +183,7 @@
             </div>
             <div class="item-card-actions">
               <a href="/admin/db?edit_id={{ item.id }}{% if query %}&q={{ query }}{% endif %}">Edit</a>
-              <form method="post" action="/admin/nutrition-items/{{ item.id }}/delete" style="margin:0;">
-                <input type="hidden" name="q" value="{{ query }}" />
-                <button type="submit" class="danger">Del</button>
-              </form>
+              <button type="button" class="danger admin-del-btn" data-item-id="{{ item.id }}" data-q="{{ query }}">Del</button>
             </div>
           </div>
           <div class="item-card-macros">
@@ -237,4 +234,66 @@
     {% endfor %}
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Nutrition item create/update
+document.getElementById("nutrition-item-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = {};
+  for (const [k, v] of fd.entries()) { body[k] = v; }
+  ["item_id", "serving_grams", "calories", "protein_g", "carbs_g", "fat_g"].forEach((k) => {
+    if (body[k]) body[k] = parseFloat(body[k]);
+  });
+  const q = body.q || "";
+  delete body.q;
+  try {
+    const res = await fetch("/api/v1/admin/nutrition-items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      window.location.href = "/admin/db?" + (q ? "q=" + encodeURIComponent(q) + "&" : "") + "message=" + encodeURIComponent("Nutrition item " + data.action);
+    } else {
+      alert(data.error || "Error");
+    }
+  } catch (err) { alert("Network error"); }
+});
+
+// Nutrition item delete
+document.querySelectorAll(".admin-del-btn").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    if (!confirm("Delete this nutrition item?")) return;
+    const id = btn.dataset.itemId;
+    const q = btn.dataset.q || "";
+    try {
+      const res = await fetch("/api/v1/admin/nutrition-items/" + id, { method: "DELETE" });
+      if (res.ok) {
+        window.location.href = "/admin/db?" + (q ? "q=" + encodeURIComponent(q) + "&" : "") + "message=Nutrition+item+deleted";
+      } else {
+        alert("Error deleting");
+      }
+    } catch (err) { alert("Network error"); }
+  });
+});
+
+// Label import (multipart)
+document.getElementById("label-import-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  try {
+    const res = await fetch("/api/v1/admin/label-import", { method: "POST", body: fd });
+    const data = await res.json();
+    if (res.ok) {
+      window.location.href = "/admin/db?message=" + encodeURIComponent("Label imported into " + (data.scope === "user" ? "custom foods" : "master DB"));
+    } else {
+      alert(data.error || "Import failed");
+    }
+  } catch (err) { alert("Network error"); }
+});
+</script>
 {% endblock %}

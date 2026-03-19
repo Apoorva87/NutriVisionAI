@@ -62,7 +62,7 @@ async function searchFoods(query, limit = 12) {
   const normalized = normalizeLabel(query);
   if (!normalized) return [];
   if (foodSearchCache.has(normalized)) return foodSearchCache.get(normalized);
-  const response = await fetch(`/api/foods?q=${encodeURIComponent(normalized)}&limit=${limit}`);
+  const response = await fetch(`/api/v1/foods?q=${encodeURIComponent(normalized)}&limit=${limit}`);
   const payload = await response.json();
   const items = Array.isArray(payload.items) ? payload.items : [];
   items.forEach((item) => {

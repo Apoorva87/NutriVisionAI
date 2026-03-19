@@ -118,13 +118,16 @@ builderSave.addEventListener("click", async () => {
     };
   });
 
-  const body = new FormData();
-  body.append("meal_name", builderMealName.value.trim() || "Quick log");
-  body.append("image_path", "");
-  body.append("items_json", JSON.stringify(items));
-
   try {
-    const res = await fetch("/api/meals", { method: "POST", body });
+    const res = await fetch("/api/v1/meals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        meal_name: builderMealName.value.trim() || "Quick log",
+        image_path: "",
+        items,
+      }),
+    });
     const payload = await res.json();
     if (!res.ok) { showToast(payload.error || "Save failed"); return; }
     if (payload.dashboard) sessionStorage.setItem("nutrisight_dashboard", JSON.stringify(payload.dashboard));
@@ -167,12 +170,17 @@ document.querySelectorAll(".fav-log-btn").forEach((btn) => {
 
 document.getElementById("modal-confirm").addEventListener("click", async () => {
   if (!modalFavId) return;
-  const body = new FormData();
-  body.append("meal_name", modalMealName.value.trim() || "Meal");
-  body.append("servings", modalServings.value);
   try {
-    const res = await fetch(`/custom-foods/${modalFavId}/log`, { method: "POST", body });
-    if (res.redirected) { window.location.href = res.url; return; }
+    const res = await fetch(`/api/v1/custom-foods/${modalFavId}/log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        meal_name: modalMealName.value.trim() || "Meal",
+        servings: parseFloat(modalServings.value) || 1,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || "Error logging food"); return; }
     showToast("Logged!");
     logModal.classList.add("hidden");
     setTimeout(() => { window.location.href = "/"; }, 600);
@@ -185,7 +193,7 @@ document.querySelectorAll(".fav-del-btn").forEach((btn) => {
   btn.addEventListener("click", async () => {
     if (!confirm("Delete this favorite?")) return;
     try {
-      await fetch(`/custom-foods/${btn.dataset.id}/delete`, { method: "POST" });
+      await fetch(`/api/v1/custom-foods/${btn.dataset.id}`, { method: "DELETE" });
       btn.closest(".fav-card").remove();
       showToast("Deleted");
     } catch (err) {
@@ -197,9 +205,20 @@ document.querySelectorAll(".fav-del-btn").forEach((btn) => {
 document.getElementById("create-fav-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const form = e.target;
+  const fd = new FormData(form);
+  const body = {};
+  for (const [key, value] of fd.entries()) { body[key] = value; }
+  ["serving_grams", "calories", "protein_g", "carbs_g", "fat_g"].forEach((k) => {
+    if (body[k]) body[k] = parseFloat(body[k]);
+  });
   try {
-    const res = await fetch("/custom-foods", { method: "POST", body: new FormData(form) });
-    if (res.redirected) { window.location.href = res.url; return; }
+    const res = await fetch("/api/v1/custom-foods", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || "Error saving"); return; }
     showToast("Favorite saved!");
     setTimeout(() => location.reload(), 600);
   } catch (err) {
@@ -253,7 +272,7 @@ async function doAiLookup() {
   aiResults.innerHTML = '<div class="empty-state small">Looking up "' + escapeHtml(q) + '"...</div>';
 
   try {
-    const res = await fetch("/api/ai-food-lookup", {
+    const res = await fetch("/api/v1/llm/food-lookup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query: q, web_search: aiWebCheck.checked }),
@@ -372,7 +391,7 @@ async function saveItemToDB(item, btn) {
   btn.disabled = true;
   btn.textContent = "Saving...";
   try {
-    const res = await fetch("/api/ai-food-lookup/save", {
+    const res = await fetch("/api/v1/llm/food-lookup/save", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(item),

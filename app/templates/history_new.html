@@ -71,7 +71,7 @@ document.querySelectorAll(".meal-row").forEach((row) => {
       detail.innerHTML = '<div class="empty-state">Loading...</div>';
       detail.classList.remove("hidden");
       try {
-        const res = await fetch("/api/meals/" + id);
+        const res = await fetch("/api/v1/meals/" + id);
         const meal = await res.json();
         if (!res.ok) { detail.innerHTML = '<div class="empty-state">Error loading</div>'; return; }
         mealCache[id] = meal;
@@ -179,7 +179,7 @@ async function saveEditMeal(id) {
   });
 
   try {
-    const res = await fetch("/api/meals/" + id, {
+    const res = await fetch("/api/v1/meals/" + id, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ meal_name: mealName, items }),
@@ -210,7 +210,7 @@ function cancelEditMeal(id) {
 async function deleteMeal(id) {
   if (!confirm("Delete this meal? This cannot be undone.")) return;
   try {
-    const res = await fetch("/api/meals/" + id, { method: "DELETE" });
+    const res = await fetch("/api/v1/meals/" + id, { method: "DELETE" });
     if (res.ok) {
       const row = document.querySelector('[data-meal-id="' + id + '"]');
       const detail = document.getElementById("detail-" + id);

@@ -13,7 +13,7 @@
     <p><strong>{{ current_user.name }}</strong></p>
     <p class="small muted">{{ current_user.email }}</p>
     {% if current_user.is_system %}
-    <form method="post" action="/auth/session" class="stack mt-12">
+    <form class="stack mt-12" id="settings-login-form">
       <div class="field-row">
         <label class="field"><span>Name</span><input type="text" name="name" placeholder="Name" required /></label>
         <label class="field"><span>Email</span><input type="email" name="email" placeholder="Email" required /></label>
@@ -21,7 +21,7 @@
       <button type="submit">Sign in</button>
     </form>
     {% else %}
-    <form method="post" action="/auth/logout" class="mt-12">
+    <form class="mt-12" id="settings-logout-form">
       <button type="submit" class="btn-secondary">Sign out</button>
     </form>
     {% endif %}
@@ -105,8 +105,18 @@ if (form) {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     statusP.textContent = "Saving...";
+    const fd = new FormData(form);
+    const body = {};
+    for (const [key, value] of fd.entries()) { body[key] = value; }
+    ["calorie_goal", "protein_g", "carbs_g", "fat_g"].forEach((k) => {
+      if (body[k]) body[k] = Number(body[k]);
+    });
     try {
-      const res = await fetch("/api/settings", { method: "POST", body: new FormData(form) });
+      const res = await fetch("/api/v1/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       const payload = await res.json();
       if (res.ok) {
         showToast("Settings saved");
@@ -117,6 +127,35 @@ if (form) {
     } catch (err) {
       statusP.textContent = "Network error";
     }
+  });
+}
+
+// Auth forms
+const loginForm = document.getElementById("settings-login-form");
+if (loginForm) {
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = new FormData(loginForm);
+    try {
+      const res = await fetch("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: fd.get("name"), email: fd.get("email") }),
+      });
+      if (res.ok) { window.location.href = "/settings"; }
+      else { const d = await res.json(); alert(d.error || "Login failed"); }
+    } catch (err) { alert("Network error"); }
+  });
+}
+
+const logoutForm = document.getElementById("settings-logout-form");
+if (logoutForm) {
+  logoutForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await fetch("/api/v1/auth/logout", { method: "POST" });
+      window.location.href = "/settings";
+    } catch (err) { alert("Network error"); }
   });
 }
 </script>

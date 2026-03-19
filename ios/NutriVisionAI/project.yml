@@ -1,0 +1,27 @@
+# XcodeGen project spec — run `xcodegen generate` to create the .xcodeproj
+# Install: brew install xcodegen
+
+name: NutriVisionAI
+options:
+  bundleIdPrefix: com.nutrivisionai
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "15.0"
+
+targets:
+  NutriVisionAI:
+    type: application
+    platform: iOS
+    sources:
+      - path: .
+        excludes:
+          - Package.swift
+          - project.yml
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nutrivisionai.app
+        INFOPLIST_KEY_CFBundleDisplayName: NutriVision
+        SWIFT_VERSION: "5.9"
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_NSCameraUsageDescription: "NutriVision needs camera access to scan food photos"
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "NutriVision needs photo library access to select food photos"

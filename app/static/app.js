@@ -281,7 +281,7 @@ async function searchFoods(query) {
   if (foodSearchCache.has(normalized)) {
     return foodSearchCache.get(normalized);
   }
-  const response = await fetch(`/api/foods?q=${encodeURIComponent(normalized)}&limit=12`);
+  const response = await fetch(`/api/v1/foods?q=${encodeURIComponent(normalized)}&limit=12`);
   const payload = await response.json();
   const items = Array.isArray(payload.items) ? payload.items : [];
   items.forEach((item) => {
@@ -584,7 +584,7 @@ function renderWorkspace() {
 }
 
 async function fetchMealDetailById(mealId) {
-  const response = await fetch(`/api/meals/${mealId}`);
+  const response = await fetch(`/api/v1/meals/${mealId}`);
   const payload = await response.json();
   if (!response.ok) {
     statusEl.textContent = payload.error || "Unable to load meal detail.";
@@ -865,7 +865,7 @@ if (analyzeForm) analyzeForm.addEventListener("submit", async (event) => {
 
   let payload;
   try {
-    const response = await fetch("/api/analyze", {
+    const response = await fetch("/api/v1/analysis", {
       method: "POST",
       body: formData,
     });
@@ -921,14 +921,14 @@ if (resultsForm) resultsForm.addEventListener("submit", async (event) => {
     statusEl.textContent = "Map every item to a nutrition food before saving.";
     return;
   }
-  const body = new FormData();
-  body.append("meal_name", document.getElementById("meal-name").value.trim());
-  body.append("image_path", currentImagePath);
-  body.append("items_json", JSON.stringify(items));
-
-  const response = await fetch("/api/meals", {
+  const response = await fetch("/api/v1/meals", {
     method: "POST",
-    body,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      meal_name: document.getElementById("meal-name").value.trim(),
+      image_path: currentImagePath,
+      items,
+    }),
   });
   const payload = await response.json();
   if (!response.ok) {
@@ -997,9 +997,19 @@ if (historyList) {
 if (settingsForm) {
   settingsForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const response = await fetch("/api/settings", {
-      method: "POST",
-      body: new FormData(settingsForm),
+    const formData = new FormData(settingsForm);
+    const jsonBody = {};
+    for (const [key, value] of formData.entries()) {
+      jsonBody[key] = value;
+    }
+    // Convert numeric fields
+    ["calorie_goal", "protein_g", "carbs_g", "fat_g"].forEach((k) => {
+      if (jsonBody[k]) jsonBody[k] = Number(jsonBody[k]);
+    });
+    const response = await fetch("/api/v1/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(jsonBody),
     });
     const payload = await response.json();
     if (!response.ok) {

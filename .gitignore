@@ -9,3 +9,10 @@ site/
 data/imports/**
 !data/imports/.gitkeep
 !data/imports/README.md
+
+# iOS / Xcode
+ios/*/build/
+ios/*/*.xcodeproj/xcuserdata/
+ios/*/*.xcworkspace/xcuserdata/
+*.xcuserstate
+DerivedData/

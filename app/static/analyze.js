@@ -46,7 +46,7 @@ analyzeBtn.addEventListener("click", async () => {
 
   let payload;
   try {
-    const res = await fetch("/api/analyze", { method: "POST", body: formData });
+    const res = await fetch("/api/v1/analysis", { method: "POST", body: formData });
     payload = await res.json();
     if (!res.ok) {
       showToast(payload.error || "Analysis failed");
@@ -319,13 +319,16 @@ saveBtn.addEventListener("click", async () => {
   saveBtn.disabled = true;
   saveBtn.textContent = "Saving...";
 
-  const body = new FormData();
-  body.append("meal_name", document.getElementById("meal-name").value.trim() || "Meal");
-  body.append("image_path", currentImagePath);
-  body.append("items_json", JSON.stringify(items));
-
   try {
-    const res = await fetch("/api/meals", { method: "POST", body });
+    const res = await fetch("/api/v1/meals", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        meal_name: document.getElementById("meal-name").value.trim() || "Meal",
+        image_path: currentImagePath,
+        items,
+      }),
+    });
     const payload = await res.json();
     if (!res.ok) {
       showToast(payload.error || "Save failed");
