@@ -57,17 +57,20 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 open ios/NutriVisionAI/NutriVisionAI.xcodeproj
 ```
 
-In Xcode:
+In Xcode, look at the **top toolbar** — you'll see a scheme/device selector that looks like:
+`NutriVisionAI > iPhone 16 Pro`
 
-1. **Select the scheme** in the top bar:
+1. **Select the scheme** — click the **left part** of the selector and choose:
    - `NutriVisionAI` — Backend API mode (iOS 17+, recommended)
    - `NutriVisionAI-AppleAI` — Apple Foundation Models mode (iOS 26+, requires Xcode 26 beta)
 
-2. **Select a simulator** from the device dropdown (e.g. iPhone 16 Pro)
+2. **Select a simulator** — click the **right part** (device name) and pick any iPhone listed under "iOS Simulators" (e.g. iPhone 16 Pro, iPhone 15, etc.)
 
-3. **Press Cmd+R** to build and run
+3. **Press Cmd+R** (or click the **play button** in the top-left corner) to build and run
 
-The app will launch in the iOS Simulator. Since the simulator runs on your Mac, it connects to the backend at `http://localhost:8000` by default.
+Xcode will compile the project and automatically launch the iOS Simulator with the app running. The first build takes a minute or two; subsequent builds are faster.
+
+Since the simulator runs on your Mac, it connects to the backend at `http://localhost:8000` by default — no extra network configuration needed.
 
 ### Alternative: Build from command line
 
