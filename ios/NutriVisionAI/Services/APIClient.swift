@@ -96,6 +96,49 @@ final class APIClient {
         try await get("/custom-foods?limit=\(limit)")
     }
 
+    // MARK: - Settings
+
+    func getSettings() async throws -> SettingsResponse {
+        try await get("/settings")
+    }
+
+    func updateSettings(_ settings: SettingsPayload) async throws -> SettingsUpdateResponse {
+        try await put("/settings", body: settings)
+    }
+
+    // MARK: - AI Lookup
+
+    func aiLookup(query: String, webSearch: Bool = false) async throws -> AIFoodResult {
+        struct LookupRequest: Codable {
+            let query: String
+            let webSearch: Bool
+            
+            enum CodingKeys: String, CodingKey {
+                case query
+                case webSearch = "web_search"
+            }
+        }
+        
+        struct LookupResponse: Codable {
+            let query: String
+            let aiEstimate: AIFoodResult?
+            
+            enum CodingKeys: String, CodingKey {
+                case query
+                case aiEstimate = "ai_estimate"
+            }
+        }
+        
+        let request = LookupRequest(query: query, webSearch: webSearch)
+        let response: LookupResponse = try await post("/llm/food-lookup", body: request)
+        
+        guard let result = response.aiEstimate else {
+            throw NutriError.api(statusCode: 404, message: "AI could not estimate nutrition for this food")
+        }
+        
+        return result
+    }
+
     // MARK: - HTTP Helpers
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
@@ -124,6 +167,18 @@ final class APIClient {
         let url = URL(string: "\(apiBase)\(path)")!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
+        applyAuth(&request)
+        let (data, response) = try await session.data(for: request)
+        try checkStatus(response, data: data)
+        return try decoder.decode(T.self, from: data)
+    }
+
+    private func put<T: Decodable, B: Encodable>(_ path: String, body: B) async throws -> T {
+        let url = URL(string: "\(apiBase)\(path)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(body)
         applyAuth(&request)
         let (data, response) = try await session.data(for: request)
         try checkStatus(response, data: data)

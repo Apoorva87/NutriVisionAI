@@ -268,6 +268,89 @@ struct CustomFood: Codable, Identifiable {
     }
 }
 
+// MARK: - Settings
+
+struct SettingsResponse: Codable {
+    let currentUserName: String?
+    let calorieGoal: Int
+    let proteinG: Int
+    let carbsG: Int
+    let fatG: Int
+    let modelProvider: String?
+    let portionEstimationStyle: String?
+    let lmstudioBaseUrl: String?
+    let lmstudioVisionModel: String?
+    let lmstudioPortionModel: String?
+
+    enum CodingKeys: String, CodingKey {
+        case currentUserName = "current_user_name"
+        case calorieGoal = "calorie_goal"
+        case proteinG = "protein_g"
+        case carbsG = "carbs_g"
+        case fatG = "fat_g"
+        case modelProvider = "model_provider"
+        case portionEstimationStyle = "portion_estimation_style"
+        case lmstudioBaseUrl = "lmstudio_base_url"
+        case lmstudioVisionModel = "lmstudio_vision_model"
+        case lmstudioPortionModel = "lmstudio_portion_model"
+    }
+}
+
+struct SettingsPayload: Codable {
+    var currentUserName: String?
+    var calorieGoal: Int
+    var proteinG: Int
+    var carbsG: Int
+    var fatG: Int
+    var modelProvider: String?
+    var portionEstimationStyle: String?
+    var lmstudioBaseUrl: String?
+    var lmstudioVisionModel: String?
+    var lmstudioPortionModel: String?
+
+    enum CodingKeys: String, CodingKey {
+        case currentUserName = "current_user_name"
+        case calorieGoal = "calorie_goal"
+        case proteinG = "protein_g"
+        case carbsG = "carbs_g"
+        case fatG = "fat_g"
+        case modelProvider = "model_provider"
+        case portionEstimationStyle = "portion_estimation_style"
+        case lmstudioBaseUrl = "lmstudio_base_url"
+        case lmstudioVisionModel = "lmstudio_vision_model"
+        case lmstudioPortionModel = "lmstudio_portion_model"
+    }
+}
+
+struct SettingsUpdateResponse: Codable {
+    let settings: SettingsResponse
+    let dashboard: DashboardSummary
+}
+
+// MARK: - AI Food Lookup
+
+struct AIFoodResult: Codable {
+    let foodName: String
+    let servingGrams: Double
+    let calories: Double
+    let proteinG: Double
+    let carbsG: Double
+    let fatG: Double
+    let confidence: Double?
+    let notes: String?
+    
+    enum CodingKeys: String, CodingKey {
+        case foodName = "food_name"
+        case servingGrams = "serving_grams"
+        case calories
+        case proteinG = "protein_g"
+        case carbsG = "carbs_g"
+        case fatG = "fat_g"
+        case confidence
+        case notes
+    }
+}
+
 // MARK: - Generic Error
 
 struct APIError: Codable {

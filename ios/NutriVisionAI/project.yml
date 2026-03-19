@@ -25,3 +25,8 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: true
         INFOPLIST_KEY_NSCameraUsageDescription: "NutriVision needs camera access to scan food photos"
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "NutriVision needs photo library access to select food photos"
+    info:
+      path: Info.plist
+      properties:
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
