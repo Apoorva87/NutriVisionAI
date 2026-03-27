@@ -35,6 +35,17 @@ struct ContentView: View {
                 }
                 .tag(4)
         }
+        .onAppear {
+            let appearance = UITabBarAppearance()
+            appearance.configureWithOpaqueBackground()
+            appearance.backgroundColor = UIColor(Theme.background)
+            appearance.stackedLayoutAppearance.selected.iconColor = UIColor(Theme.accent)
+            appearance.stackedLayoutAppearance.selected.titleTextAttributes = [.foregroundColor: UIColor(Theme.accent)]
+            appearance.stackedLayoutAppearance.normal.iconColor = UIColor(Theme.textMuted)
+            appearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor(Theme.textMuted)]
+            UITabBar.appearance().standardAppearance = appearance
+            UITabBar.appearance().scrollEdgeAppearance = appearance
+        }
     }
 }
 
