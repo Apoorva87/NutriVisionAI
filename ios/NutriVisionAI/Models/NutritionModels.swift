@@ -386,3 +386,46 @@ enum AnyCodableValue: Codable {
         }
     }
 }
+
+// MARK: - LLM Chat (for meal suggestions)
+
+struct LLMChatRequest: Codable {
+    let model: String
+    let messages: [LLMMessage]
+    let temperature: Double?
+}
+
+struct LLMMessage: Codable {
+    let role: String
+    let content: String
+}
+
+struct LLMChatResponse: Codable {
+    let choices: [LLMChoice]
+}
+
+struct LLMChoice: Codable {
+    let message: LLMMessage
+}
+
+// MARK: - Meal Suggestion
+
+struct MealSuggestion: Codable, Identifiable {
+    var id: String { "\(meal)-\(option)" }
+    let meal: String
+    let option: Int
+    let food: String
+    let ingredients: String
+    let reason: String
+    let calories: Double
+    let proteinG: Double
+    let carbsG: Double
+    let fatG: Double
+
+    enum CodingKeys: String, CodingKey {
+        case meal, option, food, ingredients, reason, calories
+        case proteinG = "protein_g"
+        case carbsG = "carbs_g"
+        case fatG = "fat_g"
+    }
+}

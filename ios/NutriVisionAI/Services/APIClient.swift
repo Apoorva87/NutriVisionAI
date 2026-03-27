@@ -139,6 +139,17 @@ final class APIClient {
         return result
     }
 
+    // MARK: - LLM Chat
+
+    func llmChat(model: String, messages: [LLMMessage], temperature: Double? = 0.7) async throws -> String {
+        let request = LLMChatRequest(model: model, messages: messages, temperature: temperature)
+        let response: LLMChatResponse = try await post("/llm/chat", body: request)
+        guard let content = response.choices.first?.message.content else {
+            throw NutriError.api(statusCode: 500, message: "Empty LLM response")
+        }
+        return content
+    }
+
     // MARK: - HTTP Helpers
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
