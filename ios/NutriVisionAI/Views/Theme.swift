@@ -35,7 +35,7 @@ enum Theme {
         startPoint: .leading, endPoint: .trailing
     )
 
-    // Solid macro colors (for text labels)
+    // MARK: - Solid Macro Colors (for text labels)
     static let proteinColor = Color(red: 129/255, green: 140/255, blue: 248/255)  // #818cf8
     static let carbsColor = Color(red: 251/255, green: 191/255, blue: 36/255)  // #fbbf24
     static let fatColor = Color(red: 251/255, green: 113/255, blue: 133/255)  // #fb7185
@@ -50,6 +50,7 @@ enum Theme {
         startPoint: .topLeading, endPoint: .bottomTrailing
     )
     static let calorieValue = Color(red: 192/255, green: 132/255, blue: 252/255)  // #c084fc
+    static let disabled = Color(red: 71/255, green: 85/255, blue: 105/255)  // #475569 (matches textMuted)
 
     // MARK: - Card Style Modifier
     static func cardStyle(glow: Bool = false) -> some ViewModifier {
@@ -71,11 +72,11 @@ struct CardStyleModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background(Theme.cardSurface)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
                     .stroke(glow ? Theme.cardGlow : Theme.cardBorder, lineWidth: 1)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 16))
             .shadow(color: (glow && !reduceMotion) ? Theme.accent.opacity(0.06) : .clear, radius: 12)
     }
 }
@@ -96,7 +97,7 @@ struct ReduceMotionModifier<V: Equatable>: ViewModifier {
     let value: V
 
     func body(content: Content) -> some View {
-        content.animation(reduceMotion ? .default : animation, value: value)
+        content.animation(reduceMotion ? nil : animation, value: value)
     }
 }
 
