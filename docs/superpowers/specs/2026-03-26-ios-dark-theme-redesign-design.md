@@ -2,7 +2,7 @@
 
 ## Overview
 
-Visual refresh of the NutriVisionAI iOS app with a "Neon Vitality" dark theme plus layout polish and new features. The backend stays unchanged — this is purely iOS-side work (views, theming, and client-side AI provider routing).
+Visual refresh of the NutriVisionAI iOS app with a "Neon Vitality" dark theme plus layout polish and new features. The backend stays unchanged. All AI/LLM calls route through the backend's existing `/api/v1/llm/chat` and `/api/v1/analysis` endpoints — the iOS app remains a thin UI client per the project's architectural rules.
 
 **Theme:** True black backgrounds (#0f0f0f) with purple/violet gradient accents, gradient macro colors, glowing card effects. Bold, modern, fitness-app energy.
 
@@ -29,6 +29,7 @@ All colors centralized in a new `Theme.swift` file. Views reference semantic col
 | `positive` | `#22d3ee` (cyan) | "Remaining" text, positive states |
 | `destructive` | `#ef4444` | Delete, logout, remove actions |
 | `success` | `#22c55e → #16a34a` | Checkmarks, add buttons (green gradient) |
+| `calorieValue` | `#c084fc` (violet-300) | Calorie number highlights |
 
 ## Files to Create
 
@@ -39,6 +40,7 @@ All colors centralized in a new `Theme.swift` file. Views reference semantic col
 | `Views/Components/GradientButton.swift` | Reusable gradient button component |
 | `Views/MealSuggestionsView.swift` | AI meal plan section for dashboard |
 | `Views/QuickFoodSearchSheet.swift` | Compact food search sheet for scan results |
+| `Services/KeychainHelper.swift` | Simple Keychain wrapper for storing API keys |
 
 ## Files to Modify
 
@@ -61,13 +63,13 @@ All colors centralized in a new `Theme.swift` file. Views reference semantic col
 **Existing behavior preserved:** Calorie ring, macro bars, recent meals, pull-to-refresh, meal detail sheet.
 
 **Visual changes:**
-- Calorie ring: violet gradient stroke with glow filter (`drop-shadow(0 0 8px violet-400/40)`)
+- Calorie ring: violet gradient stroke with glow (`.shadow(color: Theme.accent.opacity(0.4), radius: 8)`)
 - Ring background: `violet-400 10% opacity`
 - "Remaining" text in cyan (`#22d3ee`) for positive, red for over
 - Macro bars: gradient fills (protein=sky→indigo, carbs=yellow→orange, fat=rose→fuchsia)
 - Cards: `cardSurface` background with `cardBorder`. Hero calorie card gets `cardGlow` border
 - Meal thumbnails: gradient fallback backgrounds when no image (random from a set of dark gradients)
-- Calorie values in `#c084fc` (violet-300)
+- Calorie values in `#c084fc` (violet-300, added as `calorieValue` token)
 - Spring animation on ring progress (0.6s duration)
 
 **New: AI Meal Suggestions section** (below Recent Meals):
@@ -76,7 +78,7 @@ All colors centralized in a new `Theme.swift` file. Views reference semantic col
   - Craving text input (placeholder: "e.g. indian, pasta...")
   - Calorie budget display with +/- 100 kcal buttons (defaults to `summary.remainingCalories`)
 - Suggestion cards grouped by meal slot:
-  - Determines remaining meal slots based on current hour (breakfast <10am, lunch <2pm, snack <5pm, dinner <9pm)
+  - Determines remaining meal slots based on device local time (breakfast <10am, lunch <2pm, snack <5pm, dinner <9pm)
   - Proportional calorie split: breakfast 20%, lunch 35%, snack 10%, dinner 35%
   - 2 options per slot shown side-by-side
   - Each option shows: food name, ingredients summary, macro breakdown (colored)
@@ -87,7 +89,7 @@ All colors centralized in a new `Theme.swift` file. Views reference semantic col
 ### 2. Scan
 
 **Capture state** — visual changes only:
-- Camera icon with violet glow (`drop-shadow`)
+- Camera icon with violet glow (`.shadow(color: Theme.accent.opacity(0.3), radius: 20)`)
 - "Take Photo" button: gradient (`accentGradient`) with glow shadow
 - "Choose from Library" button: `cardSurface` with `cardBorder`
 - Both buttons 14pt corner radius, full-width
@@ -110,8 +112,10 @@ New — Portion Selector per item:
 - Multipliers: S=0.5x, M=1.0x, L=1.5x, XL=2.0x
 - Active selection: `violet-400 12% bg` + `violet-400 30% border` + violet text
 - Inactive: `white 4% bg` + `white 6% border` + muted text
-- Selecting a portion recalculates item calories and updates the nutrition banner
-- Maps to existing `gramsMultiplier` on `EditableAnalysisItem`
+- Selecting a portion updates `gramsMultiplier` on `EditableAnalysisItem`
+- **Calorie/macro scaling formula:** All nutrition values on `AnalysisItem` are absolute (for the VLM-estimated weight). Scale by: `item.calories * gramsMultiplier` (and same for proteinG, carbsG, fatG). This works because the VLM estimate = 1.0x baseline.
+- **Bug fix required:** The existing `AnalyzeView` totals compute `$1.item.calories` (raw, unscaled). Must change to `$1.item.calories * $1.gramsMultiplier` (and same for all macro totals). This fix applies to `totalCalories`, `totalProtein`, `totalCarbs`, `totalFat` computed properties.
+- Nutrition banner updates live with `.numericText()` content transition
 - Haptic feedback (`.light` impact) on selection
 
 New — Quick food search:
@@ -119,7 +123,18 @@ New — Quick food search:
 - Tapping opens `QuickFoodSearchSheet` (half-sheet):
   - Search bar → `GET /api/v1/foods?q=...`
   - Results list with name, serving, calories, macros, green "+" button
-  - Adding a food creates a new `EditableAnalysisItem` appended to the list
+  - **FoodItem → AnalysisItem conversion:** When adding a DB food to scan results, create an `AnalysisItem` with:
+    - `detectedName` = `canonicalName` (from FoodItem)
+    - `canonicalName` = `canonicalName`
+    - `portionLabel` = "1 serving"
+    - `estimatedGrams` = `servingGrams`
+    - `uncertainty` = "low"
+    - `confidence` = 1.0 (user-selected from DB)
+    - `calories/proteinG/carbsG/fatG` = values from FoodItem
+    - `visionConfidence` = 0.0 (not vision-detected)
+    - `dbMatch` = true
+    - `nutritionAvailable` = true
+  - Wrap in `EditableAnalysisItem` and append to `editableItems`
   - Item gets its own portion selector
 - Use case: VLM missed a side, sauce, or drink
 
@@ -193,10 +208,18 @@ Cloud provider config (shown on tap for OpenAI/Google/Anthropic):
 - API key stored locally in Keychain only — NOT sent to backend
 - Model name saved to backend via `PUT /settings` (`model_provider` field)
 
-Backend scope note: The current backend supports `model_provider` as "lmstudio" or "openai". For Google and Anthropic, the iOS app will make direct API calls to those providers from the device (using the locally stored API key). This means:
-- Vision analysis for cloud providers bypasses `/api/v1/analysis` and calls the cloud API directly
-- Meal suggestions for cloud providers call the cloud API directly instead of `/api/v1/llm/chat`
-- The `FoodAnalysisService` already has a provider abstraction — extend it for cloud providers
+**Architecture note — all providers route through backend:**
+The iOS app remains a thin client. All AI/LLM calls go through the backend:
+- Vision analysis: always `POST /api/v1/analysis` (multipart)
+- Meal suggestions: always `POST /api/v1/llm/chat`
+- The backend's existing `model_provider` field in settings controls which provider is used server-side
+
+For this phase, the Settings UI shows all 4 provider cards, but:
+- **Local Server** and **OpenAI** are fully functional (backend already supports them)
+- **Google** and **Anthropic** cards are shown but tapping them displays a note: "Coming soon — requires backend support". They store the user's preference locally (UserDefaults) so the UI state persists, but actual API routing is deferred to a future backend update.
+- API keys entered for cloud providers are stored in iOS Keychain for future use when backend support is added
+
+The `FoodAnalysisService` existing provider abstraction (Backend vs Apple Foundation Models) is **separate** from this LLM/chat provider selection. Image analysis provider = how to process photos (backend API vs on-device Apple FM). LLM provider = which model the backend uses for chat/suggestions. Both are configured in Settings but in different sections.
 
 ## Shared Components
 
@@ -220,6 +243,16 @@ Used in: Scan capture, Save Meal, Save Settings, provider detail sheet
 ### `Theme`
 Static struct with all color/gradient/style definitions. No Color extension pollution — just `Theme.accent`, `Theme.cardSurface`, etc.
 
+### `KeychainHelper`
+```
+Interface:
+  static func save(key: String, value: String) throws
+  static func read(key: String) -> String?
+  static func delete(key: String) throws
+Keys: "openai_api_key", "google_api_key", "anthropic_api_key"
+```
+Uses `Security` framework (`SecItemAdd`/`SecItemCopyMatching`/`SecItemDelete`). Simple wrapper, no third-party dependencies.
+
 ## New Models (NutritionModels.swift)
 
 ```swift
@@ -235,13 +268,21 @@ struct LLMMessage: Codable {
     let content: String
 }
 
+// Backend /api/v1/llm/chat returns OpenAI-compatible response
 struct LLMChatResponse: Codable {
-    // Shape depends on provider; parse the suggestion JSON from content
+    let choices: [LLMChoice]
 }
 
-// Meal suggestion parsed from LLM response
-struct MealSuggestion: Identifiable {
-    let id = UUID()
+struct LLMChoice: Codable {
+    let message: LLMMessage
+}
+
+// Meal suggestion parsed from the JSON array inside the LLM content string.
+// The LLM is prompted to return a JSON array of these objects.
+// Parsing: decode LLMChatResponse → extract choices[0].message.content →
+//          JSON-decode that string as [MealSuggestion]
+struct MealSuggestion: Codable, Identifiable {
+    var id: String { "\(meal)-\(option)" }
     let meal: String        // "breakfast", "lunch", "snack", "dinner"
     let option: Int
     let food: String
@@ -251,6 +292,13 @@ struct MealSuggestion: Identifiable {
     let proteinG: Double
     let carbsG: Double
     let fatG: Double
+
+    enum CodingKeys: String, CodingKey {
+        case meal, option, food, ingredients, reason, calories
+        case proteinG = "protein_g"
+        case carbsG = "carbs_g"
+        case fatG = "fat_g"
+    }
 }
 ```
 
@@ -285,13 +333,38 @@ func searchFoods(query: String) async throws -> FoodSearchResponse
 - Color contrast: all text meets WCAG AA on dark backgrounds
 - Portion selector: label includes weight ("Medium, approximately 150 grams")
 
+## Meal Suggestion Prompt Template
+
+Reference prompt for the `/api/v1/llm/chat` call (matches the web app's approach):
+
+```
+System: You are a nutrition assistant. The user has {remaining_cal} calories remaining today.
+Remaining macros: protein {remaining_p}g, carbs {remaining_c}g, fat {remaining_f}g.
+Current time: {device_local_time}. Remaining meal slots: {slots}.
+Recently eaten: {recent_meals_list}.
+User preference: {craving_input or "healthy balanced meals"}.
+
+Suggest 2 options per remaining meal slot. Return ONLY a JSON array:
+[{"meal":"dinner","option":1,"food":"...","ingredients":"...","reason":"...","calories":500,"protein_g":35,"carbs_g":50,"fat_g":15}, ...]
+
+Calorie budget per slot: {budget_breakdown}.
+Do not repeat foods from recently eaten list.
+```
+
 ## Testing Plan
 
-- Visual verification: run in simulator (iPhone 15 Pro) with dark mode
+**Visual verification:**
+- Run in simulator (iPhone 15 Pro) with dark mode
 - All 5 tabs load and display themed correctly
-- Portion selector: tap S/M/L/XL, verify calorie recalculation
-- Meal suggestions: mock LLM response, verify card rendering
-- Quick food search: search, add item, verify it appears in scan results
-- Settings: select each provider, verify config section appears
+- Screenshot each screen for review
+
+**Functional tests:**
+- Portion selector: tap S/M/L/XL, verify calorie recalculation in banner
+- Portion selector: verify total calories/macros use scaled values (not raw)
+- Meal suggestions: mock LLM response, verify card rendering and error states
+- Quick food search: search, add item, verify it appears in scan results with correct mapping
+- Settings: select each provider, verify config section appears/hides
+- Settings: Google/Anthropic show "coming soon" note
 - Pull-to-refresh on Dashboard and History
 - VoiceOver navigation through all screens
+- Dynamic Type: test with largest accessibility text size
