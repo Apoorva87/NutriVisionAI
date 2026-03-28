@@ -6,7 +6,7 @@ struct HistoryView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var selectedDays = 14
-    
+
     var body: some View {
         NavigationStack {
             Group {
@@ -31,18 +31,20 @@ struct HistoryView: View {
                                 .onChange(of: selectedDays) { _, _ in
                                     Task { await loadHistory() }
                                 }
-                            
+
                             // Calorie trend chart
                             CalorieTrendChart(trends: data.trends)
-                            
+
                             // Top foods section
                             TopFoodsSection(topFoods: data.topFoods)
-                            
+
                             // Meals by day
                             MealsByDaySection(groupedMeals: data.groupedMeals)
                         }
                         .padding()
                     }
+                    .background(Theme.background)
+                    .scrollContentBackground(.hidden)
                 } else {
                     ContentUnavailableView {
                         Label("No History", systemImage: "chart.bar")
@@ -52,6 +54,7 @@ struct HistoryView: View {
                 }
             }
             .navigationTitle("History")
+            .toolbarBackground(Theme.background, for: .navigationBar)
             .refreshable {
                 await loadHistory()
             }
@@ -60,7 +63,7 @@ struct HistoryView: View {
             }
         }
     }
-    
+
     private func loadHistory() async {
         isLoading = true
         errorMessage = nil
@@ -77,9 +80,9 @@ struct HistoryView: View {
 
 struct DaysSelectorView: View {
     @Binding var selectedDays: Int
-    
+
     private let options = [7, 14, 30]
-    
+
     var body: some View {
         HStack(spacing: 12) {
             ForEach(options, id: \.self) { days in
@@ -91,9 +94,22 @@ struct DaysSelectorView: View {
                         .fontWeight(selectedDays == days ? .semibold : .regular)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(selectedDays == days ? Color.accentColor : Color(.tertiarySystemGroupedBackground))
-                        .foregroundStyle(selectedDays == days ? .white : .primary)
+                        .background(
+                            selectedDays == days
+                                ? AnyShapeStyle(Theme.accentGradient)
+                                : AnyShapeStyle(Color.white.opacity(0.04))
+                        )
+                        .foregroundStyle(selectedDays == days ? .white : Theme.textSecondary)
                         .clipShape(Capsule())
+                        .overlay(
+                            selectedDays == days
+                                ? nil
+                                : Capsule().stroke(Color.white.opacity(0.06))
+                        )
+                        .shadow(
+                            color: selectedDays == days ? Theme.accentGradientStart.opacity(0.3) : .clear,
+                            radius: 6
+                        )
                 }
             }
         }
@@ -104,35 +120,35 @@ struct DaysSelectorView: View {
 
 struct CalorieTrendChart: View {
     let trends: [[String: AnyCodableValue]]
-    
+
     private var chartData: [TrendDataPoint] {
         trends.compactMap { dict -> TrendDataPoint? in
             guard let dateValue = dict["date"],
                   let caloriesValue = dict["calories"] else { return nil }
-            
+
             let dateString: String
             switch dateValue {
             case .string(let s): dateString = s
             default: return nil
             }
-            
+
             let calories: Double
             switch caloriesValue {
             case .double(let d): calories = d
             case .int(let i): calories = Double(i)
             default: return nil
             }
-            
+
             // Parse date
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
             guard let date = formatter.date(from: dateString) else { return nil }
-            
+
             // Also get protein, carbs, fat
             var protein = 0.0
             var carbs = 0.0
             var fat = 0.0
-            
+
             if let pVal = dict["protein_g"] {
                 switch pVal {
                 case .double(let d): protein = d
@@ -140,7 +156,7 @@ struct CalorieTrendChart: View {
                 default: break
                 }
             }
-            
+
             if let cVal = dict["carbs_g"] {
                 switch cVal {
                 case .double(let d): carbs = d
@@ -148,7 +164,7 @@ struct CalorieTrendChart: View {
                 default: break
                 }
             }
-            
+
             if let fVal = dict["fat_g"] {
                 switch fVal {
                 case .double(let d): fat = d
@@ -156,33 +172,34 @@ struct CalorieTrendChart: View {
                 default: break
                 }
             }
-            
+
             return TrendDataPoint(date: date, calories: calories, protein: protein, carbs: carbs, fat: fat)
         }.sorted { $0.date < $1.date }
     }
-    
+
     private var averageCalories: Double {
         guard !chartData.isEmpty else { return 0 }
         return chartData.reduce(0) { $0 + $1.calories } / Double(chartData.count)
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Calorie Trend")
                     .font(.headline)
+                    .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 VStack(alignment: .trailing) {
                     Text("Avg: \(Int(averageCalories))")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textMuted)
                 }
             }
-            
+
             if chartData.isEmpty {
                 Text("No data available")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                     .frame(height: 200)
                     .frame(maxWidth: .infinity)
             } else {
@@ -191,27 +208,30 @@ struct CalorieTrendChart: View {
                         x: .value("Date", point.date, unit: .day),
                         y: .value("Calories", point.calories)
                     )
-                    .foregroundStyle(Color.green.gradient)
+                    .foregroundStyle(Theme.accentGradient)
                     .cornerRadius(4)
-                    
+
                     RuleMark(y: .value("Average", averageCalories))
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [5, 5]))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.accent.opacity(0.3))
                 }
                 .chartXAxis {
                     AxisMarks(values: .stride(by: .day, count: chartData.count > 14 ? 7 : 2)) { value in
                         AxisValueLabel(format: .dateTime.day().month(.abbreviated))
+                            .foregroundStyle(Theme.textMuted)
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .leading)
+                    AxisMarks(position: .leading) { _ in
+                        AxisValueLabel()
+                            .foregroundStyle(Theme.textMuted)
+                    }
                 }
                 .frame(height: 200)
             }
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .themedCard()
     }
 }
 
@@ -228,46 +248,47 @@ struct TrendDataPoint: Identifiable {
 
 struct TopFoodsSection: View {
     let topFoods: [[String: AnyCodableValue]]
-    
+
     private var parsedFoods: [TopFoodItem] {
         topFoods.prefix(5).compactMap { dict -> TopFoodItem? in
             guard let nameValue = dict["canonical_name"],
                   let countValue = dict["count"],
                   let caloriesValue = dict["total_calories"] else { return nil }
-            
+
             let name: String
             switch nameValue {
             case .string(let s): name = s
             default: return nil
             }
-            
+
             let count: Int
             switch countValue {
             case .int(let i): count = i
             case .double(let d): count = Int(d)
             default: return nil
             }
-            
+
             let calories: Double
             switch caloriesValue {
             case .double(let d): calories = d
             case .int(let i): calories = Double(i)
             default: return nil
             }
-            
+
             return TopFoodItem(name: name, count: count, totalCalories: calories)
         }
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Top Foods")
                 .font(.headline)
-            
+                .foregroundStyle(Theme.textPrimary)
+
             if parsedFoods.isEmpty {
                 Text("No food data yet")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
             } else {
                 ForEach(Array(parsedFoods.enumerated()), id: \.element.name) { index, food in
                     HStack(spacing: 12) {
@@ -278,39 +299,39 @@ struct TopFoodsSection: View {
                             .frame(width: 24, height: 24)
                             .background(rankColor(for: index))
                             .clipShape(Circle())
-                        
+
                         VStack(alignment: .leading, spacing: 2) {
                             Text(food.name.capitalized)
                                 .font(.subheadline)
+                                .foregroundStyle(Theme.textPrimary)
                             Text("\(food.count) time\(food.count == 1 ? "" : "s")")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.textMuted)
                         }
-                        
+
                         Spacer()
-                        
+
                         Text("\(Int(food.totalCalories)) cal")
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.textSecondary)
                     }
-                    
+
                     if index < parsedFoods.count - 1 {
-                        Divider()
+                        Divider().overlay(Color.white.opacity(0.04))
                     }
                 }
             }
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .themedCard()
     }
-    
+
     private func rankColor(for index: Int) -> Color {
         switch index {
         case 0: return .yellow
         case 1: return .gray
         case 2: return .orange
-        default: return .secondary
+        default: return Theme.textMuted
         }
     }
 }
@@ -325,20 +346,21 @@ struct TopFoodItem {
 
 struct MealsByDaySection: View {
     let groupedMeals: [String: [MealRecord]]
-    
+
     private var sortedDates: [String] {
         groupedMeals.keys.sorted().reversed()
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Meals by Day")
                 .font(.headline)
-            
+                .foregroundStyle(Theme.textPrimary)
+
             if sortedDates.isEmpty {
                 Text("No meals logged yet")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
             } else {
                 ForEach(sortedDates, id: \.self) { dateString in
                     DayMealsCard(dateString: dateString, meals: groupedMeals[dateString] ?? [])
@@ -351,23 +373,23 @@ struct MealsByDaySection: View {
 struct DayMealsCard: View {
     let dateString: String
     let meals: [MealRecord]
-    
+
     @State private var isExpanded = false
-    
+
     private var formattedDate: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         guard let date = formatter.date(from: dateString) else { return dateString }
-        
+
         let displayFormatter = DateFormatter()
         displayFormatter.dateStyle = .medium
         return displayFormatter.string(from: date)
     }
-    
+
     private var totalCalories: Double {
         meals.reduce(0) { $0 + $1.totalCalories }
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             Button {
@@ -378,71 +400,76 @@ struct DayMealsCard: View {
                         Text(formattedDate)
                             .font(.subheadline)
                             .fontWeight(.medium)
+                            .foregroundStyle(Theme.textPrimary)
                         Text("\(meals.count) meal\(meals.count == 1 ? "" : "s")")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.textMuted)
                     }
-                    
+
                     Spacer()
-                    
+
                     Text("\(Int(totalCalories)) cal")
                         .font(.subheadline)
                         .fontWeight(.semibold)
-                    
+                        .foregroundStyle(Theme.textPrimary)
+
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textMuted)
                 }
                 .padding()
             }
             .buttonStyle(.plain)
-            
+
             if isExpanded {
-                Divider()
-                
+                Divider().overlay(Color.white.opacity(0.04))
+
                 ForEach(meals) { meal in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(meal.mealName)
                                 .font(.subheadline)
+                                .foregroundStyle(Theme.textPrimary)
                             Text(formatTime(meal.createdAt))
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.textMuted)
                         }
-                        
+
                         Spacer()
-                        
+
                         VStack(alignment: .trailing, spacing: 2) {
                             Text("\(Int(meal.totalCalories)) cal")
                                 .font(.caption)
+                                .foregroundStyle(Theme.textPrimary)
                             HStack(spacing: 4) {
                                 Text("P:\(Int(meal.totalProteinG))")
+                                    .foregroundStyle(Theme.proteinColor)
                                 Text("C:\(Int(meal.totalCarbsG))")
+                                    .foregroundStyle(Theme.carbsColor)
                                 Text("F:\(Int(meal.totalFatG))")
+                                    .foregroundStyle(Theme.fatColor)
                             }
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
                         }
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 8)
-                    
+
                     if meal.id != meals.last?.id {
-                        Divider()
+                        Divider().overlay(Color.white.opacity(0.04))
                             .padding(.leading)
                     }
                 }
             }
         }
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .themedCard()
     }
-    
+
     private func formatTime(_ isoString: String) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         guard let date = formatter.date(from: isoString) else { return "" }
-        
+
         let timeFormatter = DateFormatter()
         timeFormatter.timeStyle = .short
         return timeFormatter.string(from: date)
