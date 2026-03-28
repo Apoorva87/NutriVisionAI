@@ -362,7 +362,7 @@ struct AnalysisResultsView: View {
                     TextField("Enter meal name", text: $mealName)
                         .padding(10)
                         .background(Color.white.opacity(0.04))
-                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.06)))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.cardBorder))
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                         .foregroundStyle(Theme.textPrimary)
                 }
@@ -404,7 +404,7 @@ struct AnalysisResultsView: View {
                             .foregroundStyle(Theme.accentGradientStart)
                             .frame(maxWidth: .infinity)
                             .padding(10)
-                            .background(Color.white.opacity(0.03))
+                            .background(Theme.cardSurface)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
                                     .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [6]))

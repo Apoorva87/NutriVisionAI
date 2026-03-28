@@ -291,7 +291,7 @@ struct MealBuilderSummary: View {
                 TextField("Meal name (optional)", text: $mealName)
                     .padding(10)
                     .background(Color.white.opacity(0.04))
-                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.06)))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.cardBorder))
                     .clipShape(RoundedRectangle(cornerRadius: 10))
                     .foregroundStyle(Theme.textPrimary)
                     .padding(.horizontal)
@@ -434,7 +434,7 @@ struct FoodSearchSection: View {
                 .background(Color.white.opacity(0.04))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.white.opacity(0.06))
+                        .stroke(Theme.cardBorder)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
@@ -652,7 +652,7 @@ struct AIFoodLookupSheet: View {
                         TextField("e.g., pad thai, homemade pizza, acai bowl", text: $query)
                             .padding(10)
                             .background(Color.white.opacity(0.04))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.06)))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.cardBorder))
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                             .foregroundStyle(Theme.textPrimary)
 

@@ -218,7 +218,7 @@ struct MacroProgressBar: View {
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.white.opacity(0.06))
+                        .fill(Theme.cardBorder)
 
                     RoundedRectangle(cornerRadius: 4)
                         .fill(gradient)

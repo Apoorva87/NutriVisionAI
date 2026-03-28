@@ -33,7 +33,7 @@ struct PortionSelector: View {
                     .background(isSelected ? Theme.accent.opacity(0.12) : Color.white.opacity(0.04))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(isSelected ? Theme.accent.opacity(0.3) : Color.white.opacity(0.06), lineWidth: 1)
+                            .stroke(isSelected ? Theme.accent.opacity(0.3) : Theme.cardBorder, lineWidth: 1)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .foregroundStyle(isSelected ? Theme.accent : Theme.textSecondary)

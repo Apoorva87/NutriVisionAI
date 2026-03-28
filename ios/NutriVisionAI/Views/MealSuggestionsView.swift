@@ -58,7 +58,7 @@ struct MealSuggestionsView: View {
                 }
                 .padding(8)
                 .background(Color.white.opacity(0.04))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.06)))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.cardBorder))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
 
                 HStack(spacing: 6) {
@@ -75,7 +75,7 @@ struct MealSuggestionsView: View {
                 }
                 .padding(8)
                 .background(Color.white.opacity(0.04))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.06)))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.cardBorder))
                 .clipShape(RoundedRectangle(cornerRadius: 10))
             }
 
@@ -240,8 +240,8 @@ private struct SuggestionOption: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(Color.white.opacity(0.03))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.06)))
+        .background(Theme.cardSurface)
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.cardBorder))
         .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }

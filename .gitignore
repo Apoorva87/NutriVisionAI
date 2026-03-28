@@ -16,3 +16,9 @@ ios/*/*.xcodeproj/xcuserdata/
 ios/*/*.xcworkspace/xcuserdata/
 *.xcuserstate
 DerivedData/
+.DS_Store
+.superpowers/
+app.db-shm
+app.db-wal
+ios/*/.build/
+ios/*/.swiftpm/

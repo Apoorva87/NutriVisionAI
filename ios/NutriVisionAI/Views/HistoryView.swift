@@ -104,7 +104,7 @@ struct DaysSelectorView: View {
                         .overlay(
                             selectedDays == days
                                 ? nil
-                                : Capsule().stroke(Color.white.opacity(0.06))
+                                : Capsule().stroke(Theme.cardBorder)
                         )
                         .shadow(
                             color: selectedDays == days ? Theme.accentGradientStart.opacity(0.3) : .clear,
