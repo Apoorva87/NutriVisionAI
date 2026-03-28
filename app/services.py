@@ -248,6 +248,12 @@ def build_provider_bundle() -> Dict[str, object]:
         model = str(settings.get("openai_model", "gpt-4o-mini"))
         vision_provider = OpenAIVisionProvider(api_key, model)
         portion_estimator = OpenAIPortionEstimator(api_key, model)
+    elif provider_name == "google":
+        from app.providers.gemini_provider import GeminiPortionEstimator, GeminiVisionProvider  # noqa: PLC0415
+        api_key = str(settings.get("google_api_key", ""))
+        model = str(settings.get("google_model", "gemini-2.0-flash"))
+        vision_provider = GeminiVisionProvider(api_key, model)
+        portion_estimator = GeminiPortionEstimator(api_key, model)
     elif provider_name == "api":
         portion_estimator = ApiFallbackEstimator()
 

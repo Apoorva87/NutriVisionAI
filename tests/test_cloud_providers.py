@@ -87,3 +87,47 @@ def test_openai_portion_estimator():
     assert len(result) == 1
     assert result[0]["canonical_name"] == "rice"
     assert result[0]["estimated_grams"] == 200
+
+
+def test_gemini_vision_provider_detect_food_items():
+    """Gemini provider should parse a generateContent response into food detections."""
+    from app.providers.gemini_provider import GeminiVisionProvider
+
+    provider = GeminiVisionProvider(api_key="test-key", model="gemini-2.0-flash")
+
+    mock_response = MagicMock()
+    mock_response.text = json.dumps({
+        "items": [
+            {"label": "pasta", "confidence": 0.88},
+            {"label": "tomato sauce", "confidence": 0.82},
+        ]
+    })
+
+    with patch("app.providers.gemini_provider.genai") as mock_genai:
+        mock_client = MagicMock()
+        mock_genai.Client.return_value = mock_client
+        mock_client.models.generate_content.return_value = mock_response
+
+        # Re-init provider so it picks up mock client
+        provider = GeminiVisionProvider(api_key="test-key", model="gemini-2.0-flash")
+
+        test_image = Path(__file__).parent.parent / "tests" / "fixtures" / "test_meal.jpg"
+        test_image.parent.mkdir(parents=True, exist_ok=True)
+        test_image.write_bytes(b"\xff\xd8\xff\xe0" + b"\x00" * 100)
+
+        try:
+            items = provider.detect_food_items(test_image)
+        finally:
+            test_image.unlink(missing_ok=True)
+
+    assert len(items) == 2
+    assert items[0]["label"] == "pasta"
+
+
+def test_gemini_vision_provider_missing_key():
+    """Gemini provider should raise when API key is empty."""
+    from app.providers.gemini_provider import GeminiVisionProvider
+    from app.providers.utils import RemoteProviderUnavailable
+
+    with pytest.raises(RemoteProviderUnavailable, match="API key"):
+        GeminiVisionProvider(api_key="", model="gemini-2.0-flash")
