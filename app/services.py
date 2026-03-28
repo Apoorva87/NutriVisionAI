@@ -1,14 +1,18 @@
 import json
-import mimetypes
 import urllib.error
 import urllib.request
-from base64 import b64encode
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from app.db import fetch_settings
 from app.providers.llm import PortionEstimator, StubPortionEstimator
 from app.providers.nutrition import calculate_item_nutrition, normalize_food_name
+from app.providers.utils import (
+    RemoteProviderUnavailable,
+    extract_list_payload,
+    image_file_to_data_url,
+    parse_json_object,
+)
 from app.providers.vision import StubVisionProvider, VisionProvider
 from app.schemas import (
     AnalysisItem,
@@ -17,10 +21,6 @@ from app.schemas import (
     NutritionTotals,
     PortionEstimate,
 )
-
-
-class RemoteProviderUnavailable(RuntimeError):
-    pass
 
 
 NON_TRACKED_LABELS = {"cilantro", "coriander", "garnish", "dessert", "plate", "bowl", "utensils"}
@@ -220,145 +220,6 @@ class LMStudioClient:
             raise RemoteProviderUnavailable("LM Studio request failed: {0}".format(exc)) from exc
 
 
-def image_file_to_data_url(image_path: Path) -> str:
-    mime_type = mimetypes.guess_type(image_path.name)[0] or "image/jpeg"
-    encoded = b64encode(image_path.read_bytes()).decode("ascii")
-    return "data:{0};base64,{1}".format(mime_type, encoded)
-
-
-def parse_json_array(text: object) -> List[Dict[str, object]]:
-    """Extract a JSON array from LLM response text."""
-    if isinstance(text, list):
-        text = "".join(str(part) for part in text)
-    if not isinstance(text, str):
-        return []
-    stripped = text.strip()
-    # Try direct parse
-    try:
-        result = json.loads(stripped)
-        if isinstance(result, list):
-            return result
-    except json.JSONDecodeError:
-        pass
-    # Find first [ and matching ]
-    start = stripped.find("[")
-    if start == -1:
-        return []
-    depth = 0
-    in_string = False
-    escape = False
-    for i in range(start, len(stripped)):
-        ch = stripped[i]
-        if escape:
-            escape = False
-            continue
-        if ch == "\\":
-            escape = True
-            continue
-        if ch == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if ch == "[":
-            depth += 1
-        elif ch == "]":
-            depth -= 1
-            if depth == 0:
-                try:
-                    result = json.loads(stripped[start:i + 1])
-                    if isinstance(result, list):
-                        return result
-                except json.JSONDecodeError:
-                    pass
-                break
-    return []
-
-
-def parse_json_object(text: object) -> Dict[str, object]:
-    if isinstance(text, list):
-        text = "".join(str(part) for part in text)
-    if not isinstance(text, str):
-        raise RemoteProviderUnavailable("LM Studio returned non-text content.")
-    stripped = text.strip()
-    try:
-        return json.loads(stripped)
-    except json.JSONDecodeError:
-        candidate = _extract_balanced_json(stripped)
-        if candidate is None:
-            raise RemoteProviderUnavailable("LM Studio response did not contain valid JSON.")
-        try:
-            return json.loads(candidate)
-        except json.JSONDecodeError as exc:
-            raise RemoteProviderUnavailable("LM Studio response contained invalid JSON.") from exc
-
-
-def _extract_balanced_json(text: str) -> Optional[str]:
-    start = text.find("{")
-    if start == -1:
-        return None
-    depth = 0
-    in_string = False
-    escape = False
-    for i in range(start, len(text)):
-        ch = text[i]
-        if escape:
-            escape = False
-            continue
-        if ch == "\\":
-            escape = True
-            continue
-        if ch == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return text[start : i + 1]
-    return None
-
-
-def extract_list_payload(payload: Dict[str, object]) -> List[Dict[str, object]]:
-    if isinstance(payload.get("items"), list):
-        results = []
-        for item in payload["items"]:
-            if isinstance(item, dict):
-                results.append(item)
-            elif isinstance(item, str):
-                results.append({"label": item, "confidence": 0.65})
-        return results
-    if isinstance(payload.get("results"), list):
-        results = []
-        for item in payload["results"]:
-            if isinstance(item, dict):
-                results.append(item)
-            elif isinstance(item, str):
-                results.append({"label": item, "confidence": 0.65})
-        return results
-    if isinstance(payload.get("data"), list):
-        results = []
-        for item in payload["data"]:
-            if isinstance(item, dict):
-                results.append(item)
-            elif isinstance(item, str):
-                results.append({"label": item, "confidence": 0.65})
-        return results
-    candidate_keys = {
-        "label",
-        "name",
-        "detected_name",
-        "canonical_name",
-        "portion_label",
-        "estimated_grams",
-        "confidence",
-    }
-    if any(key in payload for key in candidate_keys):
-        return [payload]
-    return []
 
 
 def build_provider_bundle() -> Dict[str, object]:
@@ -381,6 +242,12 @@ def build_provider_bundle() -> Dict[str, object]:
             lmstudio_portion_model or lmstudio_vision_model,
             str(settings.get("portion_estimation_style", "grams_with_range")),
         )
+    elif provider_name == "openai":
+        from app.providers.openai_provider import OpenAIPortionEstimator, OpenAIVisionProvider  # noqa: PLC0415
+        api_key = str(settings.get("openai_api_key", ""))
+        model = str(settings.get("openai_model", "gpt-4o-mini"))
+        vision_provider = OpenAIVisionProvider(api_key, model)
+        portion_estimator = OpenAIPortionEstimator(api_key, model)
     elif provider_name == "api":
         portion_estimator = ApiFallbackEstimator()
 
