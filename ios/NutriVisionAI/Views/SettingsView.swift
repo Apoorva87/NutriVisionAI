@@ -848,6 +848,14 @@ struct ServerURLSheet: View {
                 }
                 .font(.caption)
                 .listRowBackground(Theme.cardSurface)
+
+                Section {
+                    GradientButton(title: "Save", isDisabled: serverURL.isEmpty) {
+                        onSave()
+                        dismiss()
+                    }
+                }
+                .listRowBackground(Color.clear)
             }
             .scrollContentBackground(.hidden)
             .background(Theme.background)
@@ -858,14 +866,6 @@ struct ServerURLSheet: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
                         .foregroundStyle(Theme.accent)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") {
-                        onSave()
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                    .foregroundStyle(Theme.accent)
                 }
             }
         }
