@@ -24,24 +24,21 @@ struct DashboardView: View {
                     }
                 } else if let data = dashboardData {
                     VStack(spacing: 24) {
-                        // Calorie Summary Card
-                        CalorieSummaryCard(summary: data.summary)
-
-                        // Macro Progress
-                        MacroProgressSection(summary: data.summary)
-
-                        // Recent Meals
-                        RecentMealsSection(
-                            meals: data.recentMeals,
-                            onDelete: deleteMeal,
-                            onSelect: { meal in selectedMeal = meal }
-                        )
+                        // Compact Calorie + Macro Card
+                        CompactDashboardCard(summary: data.summary)
 
                         // AI Meal Suggestions
                         MealSuggestionsView(
                             summary: data.summary,
                             recentMeals: data.recentMeals,
                             settings: nil
+                        )
+
+                        // Recent Meals
+                        RecentMealsSection(
+                            meals: data.recentMeals,
+                            onDelete: deleteMeal,
+                            onSelect: { meal in selectedMeal = meal }
                         )
                     }
                     .padding()
@@ -105,9 +102,9 @@ struct DashboardView: View {
     }
 }
 
-// MARK: - Calorie Summary Card
+// MARK: - Compact Dashboard Card
 
-struct CalorieSummaryCard: View {
+struct CompactDashboardCard: View {
     let summary: DashboardSummary
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -117,102 +114,64 @@ struct CalorieSummaryCard: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            Text("Today's Calories")
-                .font(.headline)
-                .foregroundStyle(Theme.textSecondary)
-
+        HStack(spacing: 16) {
+            // Compact calorie ring
             ZStack {
-                // Background ring
                 Circle()
-                    .stroke(Theme.accent.opacity(0.1), lineWidth: 20)
-
-                // Progress ring
+                    .stroke(Theme.accent.opacity(0.1), lineWidth: 10)
                 Circle()
                     .trim(from: 0, to: progress)
-                    .stroke(Theme.accentGradient, style: StrokeStyle(lineWidth: 20, lineCap: .round))
+                    .stroke(Theme.accentGradient, style: StrokeStyle(lineWidth: 10, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                     .motionSafeAnimation(.spring(duration: 0.6), value: progress)
-                    .shadow(color: reduceMotion ? .clear : Theme.accent.opacity(0.4), radius: 8)
 
-                // Center content
-                VStack(spacing: 4) {
+                VStack(spacing: 1) {
                     Text("\(Int(summary.calories))")
-                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
                         .foregroundStyle(Theme.textPrimary)
                         .contentTransition(.numericText())
+                    Text("kcal")
+                        .font(.caption2)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+            }
+            .frame(width: 90, height: 90)
 
+            // Right side: calorie info + macro bars
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text("of \(summary.calorieGoal) kcal")
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundStyle(Theme.textSecondary)
 
                     if summary.remainingCalories > 0 {
                         Text("\(Int(summary.remainingCalories)) remaining")
                             .font(.caption)
+                            .fontWeight(.medium)
                             .foregroundStyle(Theme.positive)
                     } else {
                         Text("\(Int(-summary.remainingCalories)) over")
                             .font(.caption)
+                            .fontWeight(.medium)
                             .foregroundStyle(Theme.destructive)
                     }
                 }
+
+                CompactMacroBar(label: "P", value: summary.proteinG, goal: Double(summary.macroGoals.proteinG), gradient: Theme.proteinGradient)
+                CompactMacroBar(label: "C", value: summary.carbsG, goal: Double(summary.macroGoals.carbsG), gradient: Theme.carbsGradient)
+                CompactMacroBar(label: "F", value: summary.fatG, goal: Double(summary.macroGoals.fatG), gradient: Theme.fatGradient)
             }
-            .frame(width: 200, height: 200)
         }
         .padding()
-        .frame(maxWidth: .infinity)
         .themedCard(glow: true)
     }
 }
 
-// MARK: - Macro Progress Section
-
-struct MacroProgressSection: View {
-    let summary: DashboardSummary
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Macros")
-                .font(.headline)
-                .foregroundStyle(Theme.textPrimary)
-
-            VStack(spacing: 12) {
-                MacroProgressBar(
-                    label: "Protein",
-                    value: summary.proteinG,
-                    goal: Double(summary.macroGoals.proteinG),
-                    gradient: Theme.proteinGradient,
-                    unit: "g"
-                )
-
-                MacroProgressBar(
-                    label: "Carbs",
-                    value: summary.carbsG,
-                    goal: Double(summary.macroGoals.carbsG),
-                    gradient: Theme.carbsGradient,
-                    unit: "g"
-                )
-
-                MacroProgressBar(
-                    label: "Fat",
-                    value: summary.fatG,
-                    goal: Double(summary.macroGoals.fatG),
-                    gradient: Theme.fatGradient,
-                    unit: "g"
-                )
-            }
-        }
-        .padding()
-        .themedCard()
-    }
-}
-
-struct MacroProgressBar: View {
+struct CompactMacroBar: View {
     let label: String
     let value: Double
     let goal: Double
     let gradient: LinearGradient
-    let unit: String
 
     private var progress: Double {
         guard goal > 0 else { return 0 }
@@ -220,30 +179,28 @@ struct MacroProgressBar: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(label)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundStyle(Theme.textSecondary)
-                Spacer()
-                Text("\(Int(value))/\(Int(goal))\(unit)")
-                    .font(.subheadline)
-                    .foregroundStyle(Theme.textPrimary)
-            }
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.caption2)
+                .fontWeight(.bold)
+                .foregroundStyle(Theme.textMuted)
+                .frame(width: 12)
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: 3)
                         .fill(Theme.cardBorder)
-
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: 3)
                         .fill(gradient)
                         .frame(width: geometry.size.width * progress)
-                        .motionSafeAnimation(.spring(duration: 0.4), value: progress)
                 }
             }
-            .frame(height: 8)
+            .frame(height: 6)
+
+            Text("\(Int(value))/\(Int(goal))g")
+                .font(.caption2)
+                .foregroundStyle(Theme.textSecondary)
+                .frame(width: 60, alignment: .trailing)
         }
     }
 }
