@@ -175,6 +175,17 @@ struct FoodItem: Codable, Identifiable {
     let fatG: Double
     let sourceLabel: String?
 
+    init(canonicalName: String, servingGrams: Double, calories: Double,
+         proteinG: Double, carbsG: Double, fatG: Double, sourceLabel: String?) {
+        self.canonicalName = canonicalName
+        self.servingGrams = servingGrams
+        self.calories = calories
+        self.proteinG = proteinG
+        self.carbsG = carbsG
+        self.fatG = fatG
+        self.sourceLabel = sourceLabel
+    }
+
     enum CodingKeys: String, CodingKey {
         case canonicalName = "canonical_name"
         case servingGrams = "serving_grams"
@@ -184,6 +195,18 @@ struct FoodItem: Codable, Identifiable {
         case fatG = "fat_g"
         case sourceLabel = "source_label"
     }
+}
+
+// MARK: - Local Nutrition Info (for bundled DB lookups)
+
+struct LocalNutritionInfo {
+    let canonicalName: String
+    let servingGrams: Double
+    let calories: Double
+    let proteinG: Double
+    let carbsG: Double
+    let fatG: Double
+    let sourceLabel: String
 }
 
 // MARK: - Analysis
