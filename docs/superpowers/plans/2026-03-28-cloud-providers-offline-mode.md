@@ -104,10 +104,8 @@ def test_openai_vision_provider_missing_key():
     from app.providers.openai_provider import OpenAIVisionProvider
     from app.services import RemoteProviderUnavailable
 
-    provider = OpenAIVisionProvider(api_key="", model="gpt-4o-mini")
-
     with pytest.raises(RemoteProviderUnavailable, match="API key"):
-        provider.detect_food_items(Path("fake.jpg"))
+        OpenAIVisionProvider(api_key="", model="gpt-4o-mini")
 
 
 def test_openai_portion_estimator():
@@ -157,6 +155,11 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'app.providers.openai_p
 - [ ] **Step 3: Install OpenAI SDK**
 
 Run: `.venv/bin/pip install openai`
+
+Then update requirements.txt:
+```bash
+echo "openai" >> requirements.txt
+```
 
 - [ ] **Step 4: Implement OpenAI provider**
 
@@ -389,6 +392,11 @@ Expected: FAIL — `ModuleNotFoundError: No module named 'app.providers.gemini_p
 - [ ] **Step 3: Install Google GenAI SDK**
 
 Run: `.venv/bin/pip install google-genai`
+
+Then update requirements.txt:
+```bash
+echo "google-genai" >> requirements.txt
+```
 
 - [ ] **Step 4: Implement Gemini provider**
 
@@ -887,7 +895,7 @@ final class NutritionDB {
             defer { sqlite3_finalize(stmt) }
 
             let pattern = "%\(query)%"
-            sqlite3_bind_text(stmt, 1, (pattern as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 1, (pattern as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
             sqlite3_bind_int(stmt, 2, Int32(limit))
 
             while sqlite3_step(stmt) == SQLITE_ROW {
@@ -927,7 +935,7 @@ final class NutritionDB {
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
 
-            sqlite3_bind_text(stmt, 1, (resolved as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 1, (resolved as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
 
             guard sqlite3_step(stmt) == SQLITE_ROW else { return }
 
@@ -972,7 +980,7 @@ final class NutritionDB {
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return name }
         defer { sqlite3_finalize(stmt) }
 
-        sqlite3_bind_text(stmt, 1, (name.lowercased() as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(stmt, 1, (name.lowercased() as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
 
         guard sqlite3_step(stmt) == SQLITE_ROW else { return name }
         return String(cString: sqlite3_column_text(stmt, 0))
@@ -1090,9 +1098,9 @@ final class LocalMealStore {
             guard sqlite3_prepare_v2(db, insertMeal, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
 
-            sqlite3_bind_text(stmt, 1, (name as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 1, (name as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
             if let ip = imagePath {
-                sqlite3_bind_text(stmt, 2, (ip as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(stmt, 2, (ip as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
             } else {
                 sqlite3_bind_null(stmt, 2)
             }
@@ -1100,7 +1108,7 @@ final class LocalMealStore {
             sqlite3_bind_double(stmt, 4, totalPro)
             sqlite3_bind_double(stmt, 5, totalCarb)
             sqlite3_bind_double(stmt, 6, totalFat)
-            sqlite3_bind_text(stmt, 7, (now as NSString).utf8String, -1, nil)
+            sqlite3_bind_text(stmt, 7, (now as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
 
             guard sqlite3_step(stmt) == SQLITE_DONE else { return }
             mealId = Int(sqlite3_last_insert_rowid(db))
@@ -1111,9 +1119,9 @@ final class LocalMealStore {
                 var itemStmt: OpaquePointer?
                 guard sqlite3_prepare_v2(db, insertItem, -1, &itemStmt, nil) == SQLITE_OK else { continue }
                 sqlite3_bind_int(itemStmt, 1, Int32(mealId))
-                sqlite3_bind_text(itemStmt, 2, (item.detectedName as NSString).utf8String, -1, nil)
-                sqlite3_bind_text(itemStmt, 3, (item.canonicalName as NSString).utf8String, -1, nil)
-                sqlite3_bind_text(itemStmt, 4, (item.portionLabel as NSString).utf8String, -1, nil)
+                sqlite3_bind_text(itemStmt, 2, (item.detectedName as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+                sqlite3_bind_text(itemStmt, 3, (item.canonicalName as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+                sqlite3_bind_text(itemStmt, 4, (item.portionLabel as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
                 sqlite3_bind_double(itemStmt, 5, item.estimatedGrams)
                 sqlite3_bind_double(itemStmt, 6, item.calories)
                 sqlite3_bind_double(itemStmt, 7, item.proteinG)
@@ -1227,6 +1235,76 @@ final class LocalMealStore {
             calorieGoal: 2200, remainingCalories: 2200,
             macroGoals: MacroGoals(proteinG: 150, carbsG: 200, fatG: 65)
         )
+    }
+
+    // MARK: - History
+
+    func history(days: Int = 14) -> HistoryResponse {
+        guard let db = db else {
+            return HistoryResponse(trends: [], groupedMeals: [:], topFoods: [])
+        }
+
+        var trends: [[String: AnyCodableValue]] = []
+        var groupedMeals: [String: [MealRecord]] = [:]
+        var topFoods: [[String: AnyCodableValue]] = []
+
+        queue.sync {
+            // Trends: daily sums
+            let trendsSql = "SELECT date(created_at) as day, SUM(total_calories), SUM(total_protein_g), SUM(total_carbs_g), SUM(total_fat_g) FROM meals WHERE created_at >= date('now', '-\(days) days') GROUP BY date(created_at) ORDER BY day"
+            var stmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, trendsSql, -1, &stmt, nil) == SQLITE_OK {
+                defer { sqlite3_finalize(stmt) }
+                while sqlite3_step(stmt) == SQLITE_ROW {
+                    let day = String(cString: sqlite3_column_text(stmt, 0))
+                    trends.append([
+                        "date": AnyCodableValue.string(day),
+                        "calories": AnyCodableValue.double(sqlite3_column_double(stmt, 1)),
+                        "protein_g": AnyCodableValue.double(sqlite3_column_double(stmt, 2)),
+                        "carbs_g": AnyCodableValue.double(sqlite3_column_double(stmt, 3)),
+                        "fat_g": AnyCodableValue.double(sqlite3_column_double(stmt, 4))
+                    ])
+                }
+            }
+
+            // Grouped meals: all meals in range, grouped by date
+            let mealsSql = "SELECT id, meal_name, image_path, created_at, total_calories, total_protein_g, total_carbs_g, total_fat_g FROM meals WHERE created_at >= date('now', '-\(days) days') ORDER BY created_at DESC"
+            var mealStmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, mealsSql, -1, &mealStmt, nil) == SQLITE_OK {
+                defer { sqlite3_finalize(mealStmt) }
+                while sqlite3_step(mealStmt) == SQLITE_ROW {
+                    let mealId = Int(sqlite3_column_int(mealStmt, 0))
+                    let name = String(cString: sqlite3_column_text(mealStmt, 1))
+                    let imgPath = sqlite3_column_text(mealStmt, 2).map { String(cString: $0) }
+                    let createdAt = String(cString: sqlite3_column_text(mealStmt, 3))
+                    let meal = MealRecord(
+                        id: mealId, mealName: name, imagePath: imgPath,
+                        createdAt: createdAt, totalCalories: sqlite3_column_double(mealStmt, 4),
+                        totalProteinG: sqlite3_column_double(mealStmt, 5),
+                        totalCarbsG: sqlite3_column_double(mealStmt, 6),
+                        totalFatG: sqlite3_column_double(mealStmt, 7)
+                    )
+                    let dayKey = String(createdAt.prefix(10)) // "YYYY-MM-DD"
+                    groupedMeals[dayKey, default: []].append(meal)
+                }
+            }
+
+            // Top foods
+            let topSql = "SELECT canonical_name, COUNT(*) as cnt, SUM(calories) as total_cal FROM meal_items mi JOIN meals m ON mi.meal_id = m.id WHERE m.created_at >= date('now', '-\(days) days') GROUP BY canonical_name ORDER BY cnt DESC LIMIT 10"
+            var topStmt: OpaquePointer?
+            if sqlite3_prepare_v2(db, topSql, -1, &topStmt, nil) == SQLITE_OK {
+                defer { sqlite3_finalize(topStmt) }
+                while sqlite3_step(topStmt) == SQLITE_ROW {
+                    let foodName = String(cString: sqlite3_column_text(topStmt, 0))
+                    topFoods.append([
+                        "canonical_name": AnyCodableValue.string(foodName),
+                        "count": AnyCodableValue.int(Int(sqlite3_column_int(topStmt, 1))),
+                        "total_calories": AnyCodableValue.double(sqlite3_column_double(topStmt, 2))
+                    ])
+                }
+            }
+        }
+
+        return HistoryResponse(trends: trends, groupedMeals: groupedMeals, topFoods: topFoods)
     }
 }
 
@@ -1856,13 +1934,57 @@ In `DashboardView.swift`, modify `loadDashboard()`:
     }
 ```
 
-- [ ] **Step 5: Build and verify**
+- [ ] **Step 5: Update HistoryView to route data source**
 
-- [ ] **Step 6: Commit**
+In `HistoryView.swift`, modify `loadHistory()`:
+
+```swift
+    private func loadHistory() async {
+        isLoading = true
+        errorMessage = nil
+
+        if FoodAnalysisService.shared.isCloudMode {
+            // Cloud mode: read from local store
+            historyData = LocalMealStore.shared.history(days: selectedDays)
+            isLoading = false
+        } else {
+            // Backend mode
+            do {
+                historyData = try await APIClient.shared.history(days: selectedDays)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isLoading = false
+        }
+    }
+```
+
+`HistoryResponse` needs a memberwise init. Add to `NutritionModels.swift` inside the struct:
+```swift
+    init(trends: [[String: AnyCodableValue]], groupedMeals: [String: [MealRecord]], topFoods: [[String: AnyCodableValue]]) {
+        self.trends = trends
+        self.groupedMeals = groupedMeals
+        self.topFoods = topFoods
+    }
+```
+
+`AnalysisResponse` needs a memberwise init. Add to `NutritionModels.swift` inside the struct:
+```swift
+    init(imagePath: String?, items: [AnalysisItem], totals: NutritionTotals, providerMetadata: [String: String]) {
+        self.imagePath = imagePath
+        self.items = items
+        self.totals = totals
+        self.providerMetadata = providerMetadata
+    }
+```
+
+- [ ] **Step 6: Build and verify**
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add ios/NutriVisionAI/Services/FoodAnalysisService.swift ios/NutriVisionAI/Views/AnalyzeView.swift ios/NutriVisionAI/Views/DashboardView.swift ios/NutriVisionAI/Models/NutritionModels.swift
-git commit -m "feat: add cloud/backend routing in FoodAnalysisService, AnalyzeView, DashboardView"
+git add ios/NutriVisionAI/Services/FoodAnalysisService.swift ios/NutriVisionAI/Views/AnalyzeView.swift ios/NutriVisionAI/Views/DashboardView.swift ios/NutriVisionAI/Views/HistoryView.swift ios/NutriVisionAI/Models/NutritionModels.swift
+git commit -m "feat: add cloud/backend routing in FoodAnalysisService, AnalyzeView, DashboardView, HistoryView"
 ```
 
 ---
