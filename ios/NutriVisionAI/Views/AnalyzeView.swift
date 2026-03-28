@@ -14,6 +14,7 @@ struct AnalyzeView: View {
     @State private var isSaving = false
     @State private var showSuccessAlert = false
     @State private var showProviderPicker = false
+    @State private var showQuickSearch = false
     
     private var totalCalories: Double {
         editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.calories * $1.gramsMultiplier }
@@ -62,6 +63,7 @@ struct AnalyzeView: View {
                         totalCarbs: totalCarbs,
                         totalFat: totalFat,
                         isSaving: isSaving,
+                        showQuickSearch: $showQuickSearch,
                         onSave: saveMeal,
                         onCancel: reset
                     )
@@ -101,6 +103,11 @@ struct AnalyzeView: View {
                 Button("OK") { reset() }
             } message: {
                 Text("Your meal has been logged successfully.")
+            }
+            .sheet(isPresented: $showQuickSearch) {
+                QuickFoodSearchSheet { newItem in
+                    editableItems.append(newItem)
+                }
             }
         }
     }
@@ -331,6 +338,7 @@ struct AnalysisResultsView: View {
     let totalCarbs: Double
     let totalFat: Double
     let isSaving: Bool
+    @Binding var showQuickSearch: Bool
     let onSave: () -> Void
     let onCancel: () -> Void
     
@@ -386,6 +394,25 @@ struct AnalysisResultsView: View {
                         ForEach($editableItems) { $item in
                             AnalysisItemRow(item: $item)
                         }
+
+                        Button { showQuickSearch = true } label: {
+                            HStack {
+                                Image(systemName: "magnifyingglass")
+                                Text("Add more items from database...")
+                            }
+                            .font(.caption)
+                            .foregroundStyle(Theme.accentGradientStart)
+                            .frame(maxWidth: .infinity)
+                            .padding(10)
+                            .background(Color.white.opacity(0.03))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [6]))
+                                    .foregroundStyle(Theme.accent.opacity(0.2))
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
+                        .padding(.horizontal)
                     }
                 }
                 
