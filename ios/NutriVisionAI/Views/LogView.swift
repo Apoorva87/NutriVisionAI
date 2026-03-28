@@ -112,24 +112,29 @@ struct LogView: View {
     }
 
     private func performSearch() {
-        guard !searchQuery.trimmingCharacters(in: .whitespaces).isEmpty else {
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
             searchResults = []
             return
         }
 
-        isSearching = true
-
-        Task {
-            do {
-                let response = try await APIClient.shared.searchFoods(query: searchQuery)
-                await MainActor.run {
-                    searchResults = response.items
-                    isSearching = false
-                }
-            } catch {
-                await MainActor.run {
-                    searchResults = []
-                    isSearching = false
+        if FoodAnalysisService.shared.isCloudMode {
+            // Local DB search — instant, no async needed
+            searchResults = NutritionDB.shared.search(query: trimmed)
+        } else {
+            isSearching = true
+            Task {
+                do {
+                    let response = try await APIClient.shared.searchFoods(query: searchQuery)
+                    await MainActor.run {
+                        searchResults = response.items
+                        isSearching = false
+                    }
+                } catch {
+                    await MainActor.run {
+                        searchResults = []
+                        isSearching = false
+                    }
                 }
             }
         }
@@ -188,35 +193,65 @@ struct LogView: View {
 
         isSaving = true
 
-        let items = mealBuilder.map { item -> MealItemInput in
-            MealItemInput(
-                detectedName: item.displayName,
-                canonicalName: item.canonicalName,
-                portionLabel: "custom",
-                estimatedGrams: item.grams,
-                uncertainty: "low",
-                confidence: 1.0
+        if FoodAnalysisService.shared.isCloudMode {
+            // Cloud mode: save locally using AnalysisItem
+            let analysisItems = mealBuilder.map { item in
+                AnalysisItem(
+                    detectedName: item.displayName,
+                    canonicalName: item.canonicalName,
+                    portionLabel: "custom",
+                    estimatedGrams: item.grams,
+                    uncertainty: "low",
+                    confidence: 1.0,
+                    calories: item.totalCalories,
+                    proteinG: item.totalProtein,
+                    carbsG: item.totalCarbs,
+                    fatG: item.totalFat,
+                    visionConfidence: 1.0,
+                    dbMatch: true,
+                    nutritionAvailable: true
+                )
+            }
+            let _ = LocalMealStore.shared.saveMeal(
+                name: mealName.isEmpty ? "Quick Log" : mealName,
+                image: nil,
+                items: analysisItems
             )
-        }
+            isSaving = false
+            showSuccessAlert = true
+            clearBuilder()
+        } else {
+            // Backend mode
+            let items = mealBuilder.map { item -> MealItemInput in
+                MealItemInput(
+                    detectedName: item.displayName,
+                    canonicalName: item.canonicalName,
+                    portionLabel: "custom",
+                    estimatedGrams: item.grams,
+                    uncertainty: "low",
+                    confidence: 1.0
+                )
+            }
 
-        let request = CreateMealRequest(
-            mealName: mealName.isEmpty ? "Quick Log" : mealName,
-            imagePath: nil,
-            items: items
-        )
+            let request = CreateMealRequest(
+                mealName: mealName.isEmpty ? "Quick Log" : mealName,
+                imagePath: nil,
+                items: items
+            )
 
-        Task {
-            do {
-                _ = try await APIClient.shared.createMeal(request)
-                await MainActor.run {
-                    isSaving = false
-                    showSuccessAlert = true
-                    clearBuilder()
-                }
-            } catch {
-                await MainActor.run {
-                    isSaving = false
-                    errorMessage = error.localizedDescription
+            Task {
+                do {
+                    _ = try await APIClient.shared.createMeal(request)
+                    await MainActor.run {
+                        isSaving = false
+                        showSuccessAlert = true
+                        clearBuilder()
+                    }
+                } catch {
+                    await MainActor.run {
+                        isSaving = false
+                        errorMessage = error.localizedDescription
+                    }
                 }
             }
         }
@@ -408,6 +443,8 @@ struct FoodSearchSection: View {
     let onSelect: (FoodItem) -> Void
     let onAILookup: () -> Void
 
+    @State private var debounceTask: Task<Void, Never>?
+
     var body: some View {
         VStack(spacing: 0) {
             // Search bar
@@ -420,6 +457,14 @@ struct FoodSearchSection: View {
                         .foregroundStyle(Theme.textPrimary)
                         .submitLabel(.search)
                         .onSubmit(onSearch)
+                        .onChange(of: searchQuery) { _ in
+                            debounceTask?.cancel()
+                            debounceTask = Task {
+                                try? await Task.sleep(nanoseconds: 250_000_000) // 250ms debounce
+                                guard !Task.isCancelled else { return }
+                                await MainActor.run { onSearch() }
+                            }
+                        }
 
                     if !searchQuery.isEmpty {
                         Button {
@@ -437,10 +482,6 @@ struct FoodSearchSection: View {
                         .stroke(Theme.cardBorder)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                Button("Search", action: onSearch)
-                    .tint(Theme.accentGradientStart)
-                    .buttonStyle(.borderedProminent)
             }
             .padding()
 
