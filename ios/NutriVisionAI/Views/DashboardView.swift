@@ -36,6 +36,13 @@ struct DashboardView: View {
                             onDelete: deleteMeal,
                             onSelect: { meal in selectedMeal = meal }
                         )
+
+                        // AI Meal Suggestions
+                        MealSuggestionsView(
+                            summary: data.summary,
+                            recentMeals: data.recentMeals,
+                            settings: nil
+                        )
                     }
                     .padding()
                 }
