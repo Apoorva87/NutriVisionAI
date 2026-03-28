@@ -44,6 +44,7 @@ targets:
           - ".DS_Store"
     settings:
       base:
+        PRODUCT_NAME: NutriVisionAI
         PRODUCT_BUNDLE_IDENTIFIER: com.nutrivisionai.app
         INFOPLIST_KEY_CFBundleDisplayName: NutriVision
         INFOPLIST_KEY_UILaunchScreen_Generation: true
