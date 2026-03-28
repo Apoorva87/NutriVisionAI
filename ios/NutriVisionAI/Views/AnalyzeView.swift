@@ -16,19 +16,19 @@ struct AnalyzeView: View {
     @State private var showProviderPicker = false
     
     private var totalCalories: Double {
-        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.calories }
+        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.calories * $1.gramsMultiplier }
     }
-    
+
     private var totalProtein: Double {
-        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.proteinG }
+        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.proteinG * $1.gramsMultiplier }
     }
-    
+
     private var totalCarbs: Double {
-        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.carbsG }
+        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.carbsG * $1.gramsMultiplier }
     }
-    
+
     private var totalFat: Double {
-        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.fatG }
+        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.fatG * $1.gramsMultiplier }
     }
     
     var body: some View {
@@ -213,41 +213,34 @@ struct ImageCaptureView: View {
             
             Image(systemName: "camera.viewfinder")
                 .font(.system(size: 80))
-                .foregroundStyle(.secondary)
-            
+                .foregroundStyle(Theme.textSecondary)
+                .shadow(color: Theme.accent.opacity(0.3), radius: 20)
+
             Text("Scan Your Meal")
                 .font(.title2)
                 .fontWeight(.semibold)
-            
+                .foregroundStyle(Theme.textPrimary)
+
             Text("Take a photo or choose from your library to analyze the nutritional content")
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             
             Spacer()
             
             VStack(spacing: 16) {
-                Button {
-                    showCamera = true
-                } label: {
-                    Label("Take Photo", systemImage: "camera.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.accentColor)
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-                
+                GradientButton(title: "Take Photo", icon: "camera.fill") { showCamera = true }
+
                 PhotosPicker(selection: $selectedPhoto, matching: .images) {
                     Label("Choose from Library", systemImage: "photo.on.rectangle")
                         .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color(.secondarySystemGroupedBackground))
-                        .foregroundStyle(.primary)
+                        .background(Theme.cardSurface)
+                        .foregroundStyle(Theme.textPrimary)
                         .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.cardBorder))
                 }
                 .onChange(of: selectedPhoto) { _, newValue in
                     Task {
@@ -297,7 +290,7 @@ struct AnalyzingProgressView: View {
             
             Text("AI is detecting food items and estimating nutrition")
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
         }
@@ -352,14 +345,18 @@ struct AnalysisResultsView: View {
                         .frame(maxHeight: 200)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
-                
+
                 // Meal name field
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Meal Name")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                     TextField("Enter meal name", text: $mealName)
-                        .textFieldStyle(.roundedBorder)
+                        .padding(10)
+                        .background(Color.white.opacity(0.04))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.06)))
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .foregroundStyle(Theme.textPrimary)
                 }
                 .padding(.horizontal)
                 
@@ -375,6 +372,7 @@ struct AnalysisResultsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Detected Items")
                         .font(.headline)
+                        .foregroundStyle(Theme.textPrimary)
                         .padding(.horizontal)
                     
                     if editableItems.isEmpty {
@@ -393,29 +391,22 @@ struct AnalysisResultsView: View {
                 
                 // Action buttons
                 VStack(spacing: 12) {
-                    Button(action: onSave) {
-                        if isSaving {
-                            ProgressView()
-                                .tint(.white)
-                        } else {
-                            Label("Save Meal", systemImage: "checkmark.circle.fill")
-                        }
-                    }
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(editableItems.filter({ $0.isIncluded }).isEmpty ? Color.gray : Color.accentColor)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-                    .disabled(isSaving || editableItems.filter({ $0.isIncluded }).isEmpty)
-                    
+                    GradientButton(
+                        title: "Save Meal",
+                        icon: "checkmark.circle.fill",
+                        isLoading: isSaving,
+                        isDisabled: editableItems.filter({ $0.isIncluded }).isEmpty,
+                        action: onSave
+                    )
+
                     Button("Cancel", action: onCancel)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textMuted)
                 }
                 .padding()
             }
         }
+        .background(Theme.background)
     }
 }
 
@@ -429,17 +420,18 @@ struct NutritionSummaryBanner: View {
     
     var body: some View {
         HStack(spacing: 0) {
-            NutritionBannerItem(value: Int(calories), label: "Cal", color: .green)
+            NutritionBannerItem(value: Int(calories), label: "Cal", color: Theme.calorieValue)
             Divider().frame(height: 40)
-            NutritionBannerItem(value: Int(protein), label: "Protein", unit: "g", color: .blue)
+            NutritionBannerItem(value: Int(protein), label: "Protein", unit: "g", color: Theme.proteinColor)
             Divider().frame(height: 40)
-            NutritionBannerItem(value: Int(carbs), label: "Carbs", unit: "g", color: .orange)
+            NutritionBannerItem(value: Int(carbs), label: "Carbs", unit: "g", color: Theme.carbsColor)
             Divider().frame(height: 40)
-            NutritionBannerItem(value: Int(fat), label: "Fat", unit: "g", color: .purple)
+            NutritionBannerItem(value: Int(fat), label: "Fat", unit: "g", color: Theme.fatColor)
         }
         .padding(.vertical, 12)
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Theme.accent.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.accent.opacity(0.12)))
         .padding(.horizontal)
     }
 }
@@ -456,15 +448,17 @@ struct NutritionBannerItem: View {
                 Text("\(value)")
                     .font(.headline)
                     .fontWeight(.bold)
+                    .foregroundStyle(color)
+                    .contentTransition(.numericText())
                 if !unit.isEmpty {
                     Text(unit)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                 }
             }
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity)
     }
@@ -474,14 +468,7 @@ struct NutritionBannerItem: View {
 
 struct AnalysisItemRow: View {
     @Binding var item: EditableAnalysisItem
-    
-    private let portionOptions = [
-        ("0.5x", 0.5),
-        ("1x", 1.0),
-        ("1.5x", 1.5),
-        ("2x", 2.0)
-    ]
-    
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
@@ -491,58 +478,40 @@ struct AnalysisItemRow: View {
                 } label: {
                     Image(systemName: item.isIncluded ? "checkmark.circle.fill" : "circle")
                         .font(.title2)
-                        .foregroundStyle(item.isIncluded ? .green : .secondary)
+                        .foregroundStyle(item.isIncluded ? Theme.successStart : Theme.textMuted)
                 }
-                
+
                 // Food info
                 VStack(alignment: .leading, spacing: 4) {
                     Text(item.item.detectedName.capitalized)
                         .font(.body)
                         .fontWeight(.medium)
                         .strikethrough(!item.isIncluded)
-                        .foregroundStyle(item.isIncluded ? .primary : .secondary)
-                    
+                        .foregroundStyle(item.isIncluded ? Theme.textPrimary : Theme.textMuted)
+
                     HStack(spacing: 8) {
                         Text("\(Int(item.adjustedGrams))g")
+                            .foregroundStyle(Theme.textMuted)
                         Text("\(Int(item.item.calories * item.gramsMultiplier)) cal")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.calorieValue)
                     }
                     .font(.caption)
                 }
-                
+
                 Spacer()
-                
-                // Portion selector
-                if item.isIncluded {
-                    Menu {
-                        ForEach(portionOptions, id: \.0) { option in
-                            Button {
-                                item.gramsMultiplier = option.1
-                            } label: {
-                                HStack {
-                                    Text(option.0)
-                                    if item.gramsMultiplier == option.1 {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(portionOptions.first { $0.1 == item.gramsMultiplier }?.0 ?? "1x")
-                                .font(.subheadline)
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.caption2)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Color(.tertiarySystemGroupedBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                    }
-                }
             }
             .padding()
-            
+
+            // PortionSelector
+            if item.isIncluded {
+                PortionSelector(
+                    baseGrams: item.item.estimatedGrams,
+                    selectedMultiplier: $item.gramsMultiplier
+                )
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+
             // Confidence indicator
             if item.isIncluded {
                 HStack(spacing: 8) {
@@ -551,22 +520,21 @@ struct AnalysisItemRow: View {
                             .font(.caption2)
                             .foregroundStyle(.orange)
                     }
-                    
+
                     Spacer()
-                    
+
                     HStack(spacing: 4) {
                         Image(systemName: "sparkles")
                         Text("AI Confidence: \(Int(item.item.confidence * 100))%")
                     }
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textMuted)
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 12)
             }
         }
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .themedCard()
         .padding(.horizontal)
     }
 }
