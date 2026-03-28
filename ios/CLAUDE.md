@@ -1,6 +1,6 @@
 # NutriVisionAI — iOS App
 
-SwiftUI app targeting **iOS 17+**. This is a thin client — all business logic, AI/LLM processing, and data persistence live in the Python backend. The iOS app is purely UI + networking.
+SwiftUI app targeting **iOS 17+**. Supports two operating modes: cloud mode (calls OpenAI/Gemini directly, uses bundled nutrition DB and local meal storage) and local server mode (routes through the Python backend).
 
 ## What This App Does
 
@@ -12,6 +12,25 @@ NutriVisionAI is a nutrition tracking app. Users can:
 5. **Manage settings** — calorie/macro goals, AI provider config
 6. **Custom foods** — create user-specific food entries, log them as meals
 7. **AI food lookup** — ask the LLM to estimate nutrition for unknown foods
+
+## Operating Modes
+
+The app has two operating modes:
+
+- **Cloud mode** (OpenAI/Gemini selected in Settings): The app calls cloud APIs directly from iOS, looks up nutrition from the bundled local SQLite DB (7,850 foods), and saves meals to local SQLite. No backend needed.
+- **Local server mode** (LMStudio selected in Settings): Routes through the Python backend for everything — vision, nutrition, meals. Same as the original architecture.
+
+`FoodAnalysisService.shared.isCloudMode` determines the current mode. Dashboard, history, and meal saving all route through either `APIClient` or `LocalMealStore` based on this flag.
+
+### New Services
+
+| File | Purpose |
+|------|---------|
+| `Services/NutritionDB.swift` | Bundled SQLite nutrition database (search, lookup, alias resolution) |
+| `Services/LocalMealStore.swift` | Local meal persistence for cloud mode |
+| `Services/OpenAIAnalysisProvider.swift` | Direct OpenAI vision API calls from iOS |
+| `Services/GeminiAnalysisProvider.swift` | Direct Gemini vision API calls from iOS |
+| `Services/FoodAnalysisService.swift` | Central routing — picks provider, exposes `isCloudMode` |
 
 ## Project Structure
 
@@ -285,7 +304,7 @@ All Swift models are in `Models/NutritionModels.swift`. They map to Python Pydan
 
 ## Key Design Decisions for the iOS Agent
 
-1. **No business logic in Swift** — don't calculate nutrition, don't validate food names against a local DB. The backend does all of this. The app is a UI shell.
+1. **Two modes for business logic** — In **local server mode**, the app is a UI shell — business logic lives in the backend. In **cloud mode**, the app does nutrition lookups locally (NutritionDB) and meal persistence locally (LocalMealStore).
 
 2. **APIClient is the single networking layer** — all HTTP goes through `Services/APIClient.swift`. Don't create separate networking code.
 
