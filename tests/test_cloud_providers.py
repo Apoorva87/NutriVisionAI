@@ -131,3 +131,17 @@ def test_gemini_vision_provider_missing_key():
 
     with pytest.raises(RemoteProviderUnavailable, match="API key"):
         GeminiVisionProvider(api_key="", model="gemini-2.0-flash")
+
+
+def test_build_provider_bundle_unknown_raises():
+    """Unknown provider should raise, not silently fall back to stub."""
+    from unittest.mock import patch as mock_patch
+    from app.providers.utils import RemoteProviderUnavailable
+
+    with mock_patch("app.services.fetch_settings", return_value={
+        "model_provider": "openai",
+        "openai_api_key": "",
+    }):
+        from app.services import build_provider_bundle
+        with pytest.raises(RemoteProviderUnavailable):
+            build_provider_bundle()

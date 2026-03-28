@@ -256,6 +256,11 @@ def build_provider_bundle() -> Dict[str, object]:
         portion_estimator = GeminiPortionEstimator(api_key, model)
     elif provider_name == "api":
         portion_estimator = ApiFallbackEstimator()
+    elif provider_name not in ("stub", ""):
+        raise RemoteProviderUnavailable(
+            f"Unknown model provider '{provider_name}'. "
+            "Supported: lmstudio, openai, google, ollama, stub"
+        )
 
     return {
         "provider_name": provider_name,
