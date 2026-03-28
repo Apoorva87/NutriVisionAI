@@ -72,6 +72,17 @@ struct DashboardSummary: Codable {
     let remainingCalories: Double
     let macroGoals: MacroGoals
 
+    init(calories: Double, proteinG: Double, carbsG: Double, fatG: Double,
+         calorieGoal: Int, remainingCalories: Double, macroGoals: MacroGoals) {
+        self.calories = calories
+        self.proteinG = proteinG
+        self.carbsG = carbsG
+        self.fatG = fatG
+        self.calorieGoal = calorieGoal
+        self.remainingCalories = remainingCalories
+        self.macroGoals = macroGoals
+    }
+
     enum CodingKeys: String, CodingKey {
         case calories
         case proteinG = "protein_g"
@@ -87,6 +98,12 @@ struct MacroGoals: Codable {
     let proteinG: Int
     let carbsG: Int
     let fatG: Int
+
+    init(proteinG: Int, carbsG: Int, fatG: Int) {
+        self.proteinG = proteinG
+        self.carbsG = carbsG
+        self.fatG = fatG
+    }
 
     enum CodingKeys: String, CodingKey {
         case proteinG = "protein_g"
@@ -106,6 +123,18 @@ struct MealRecord: Codable, Identifiable {
     let totalProteinG: Double
     let totalCarbsG: Double
     let totalFatG: Double
+
+    init(id: Int, mealName: String, imagePath: String?, createdAt: String,
+         totalCalories: Double, totalProteinG: Double, totalCarbsG: Double, totalFatG: Double) {
+        self.id = id
+        self.mealName = mealName
+        self.imagePath = imagePath
+        self.createdAt = createdAt
+        self.totalCalories = totalCalories
+        self.totalProteinG = totalProteinG
+        self.totalCarbsG = totalCarbsG
+        self.totalFatG = totalFatG
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -261,6 +290,12 @@ struct HistoryResponse: Codable {
     let trends: [[String: AnyCodableValue]]
     let groupedMeals: [String: [MealRecord]]
     let topFoods: [[String: AnyCodableValue]]
+
+    init(trends: [[String: AnyCodableValue]], groupedMeals: [String: [MealRecord]], topFoods: [[String: AnyCodableValue]]) {
+        self.trends = trends
+        self.groupedMeals = groupedMeals
+        self.topFoods = topFoods
+    }
 
     enum CodingKeys: String, CodingKey {
         case trends
