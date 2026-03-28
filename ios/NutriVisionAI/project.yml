@@ -38,6 +38,10 @@ targets:
           - Package.swift
           - project.yml
           - "*.md"
+          - "*.xcodeproj"
+          - ".swiftpm"
+          - ".build"
+          - ".DS_Store"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.nutrivisionai.app
