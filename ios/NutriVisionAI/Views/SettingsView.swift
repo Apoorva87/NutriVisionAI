@@ -31,7 +31,7 @@ private struct CloudProviderSheet: View {
     private var models: [String] {
         switch provider {
         case "openai": return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]
-        case "google": return ["gemini-1.5-pro", "gemini-1.5-flash"]
+        case "google": return ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"]
         case "anthropic": return ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"]
         default: return []
         }
@@ -670,6 +670,14 @@ struct SettingsView: View {
             lmstudioVisionModel: lmstudioVisionModel.isEmpty ? nil : lmstudioVisionModel,
             lmstudioPortionModel: lmstudioPortionModel.isEmpty ? nil : lmstudioPortionModel
         )
+
+        // Always persist goals locally for cloud mode
+        UserDefaults.standard.set(Int(calorieGoal) ?? 2200, forKey: "local_calorie_goal")
+        UserDefaults.standard.set(Int(proteinGoal) ?? 150, forKey: "local_protein_goal")
+        UserDefaults.standard.set(Int(carbsGoal) ?? 200, forKey: "local_carbs_goal")
+        UserDefaults.standard.set(Int(fatGoal) ?? 65, forKey: "local_fat_goal")
+
+        FoodAnalysisService.shared.syncFromSettings(modelProvider)
 
         Task {
             do {

@@ -411,6 +411,10 @@ struct SettingsPayload: Codable {
     var lmstudioBaseUrl: String?
     var lmstudioVisionModel: String?
     var lmstudioPortionModel: String?
+    var openaiApiKey: String?
+    var openaiModel: String?
+    var googleApiKey: String?
+    var googleModel: String?
 
     enum CodingKeys: String, CodingKey {
         case currentUserName = "current_user_name"
@@ -423,6 +427,10 @@ struct SettingsPayload: Codable {
         case lmstudioBaseUrl = "lmstudio_base_url"
         case lmstudioVisionModel = "lmstudio_vision_model"
         case lmstudioPortionModel = "lmstudio_portion_model"
+        case openaiApiKey = "openai_api_key"
+        case openaiModel = "openai_model"
+        case googleApiKey = "google_api_key"
+        case googleModel = "google_model"
     }
 }
 
