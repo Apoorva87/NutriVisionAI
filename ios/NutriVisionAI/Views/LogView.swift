@@ -13,30 +13,30 @@ struct LogView: View {
     @State private var showSuccessAlert = false
     @State private var showAILookup = false
     @State private var selectedTab = 0 // 0 = Search, 1 = Custom Foods
-    
+
     private var totalCalories: Double {
         mealBuilder.reduce(0) { $0 + $1.totalCalories }
     }
-    
+
     private var totalProtein: Double {
         mealBuilder.reduce(0) { $0 + $1.totalProtein }
     }
-    
+
     private var totalCarbs: Double {
         mealBuilder.reduce(0) { $0 + $1.totalCarbs }
     }
-    
+
     private var totalFat: Double {
         mealBuilder.reduce(0) { $0 + $1.totalFat }
     }
-    
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 // Meal builder summary (if items added)
                 if !mealBuilder.isEmpty {
                     MealBuilderSummary(
-                        items: mealBuilder,
+                        items: $mealBuilder,
                         totalCalories: totalCalories,
                         totalProtein: totalProtein,
                         totalCarbs: totalCarbs,
@@ -48,7 +48,7 @@ struct LogView: View {
                         isSaving: isSaving
                     )
                 }
-                
+
                 // Tab picker
                 Picker("Source", selection: $selectedTab) {
                     Text("Search").tag(0)
@@ -56,7 +56,7 @@ struct LogView: View {
                 }
                 .pickerStyle(.segmented)
                 .padding()
-                
+
                 if selectedTab == 0 {
                     // Food search
                     FoodSearchSection(
@@ -77,7 +77,9 @@ struct LogView: View {
                     )
                 }
             }
+            .background(Theme.background)
             .navigationTitle("Log Meal")
+            .toolbarBackground(Theme.background, for: .navigationBar)
             .toolbar {
                 if !mealBuilder.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -108,15 +110,15 @@ struct LogView: View {
             }
         }
     }
-    
+
     private func performSearch() {
         guard !searchQuery.trimmingCharacters(in: .whitespaces).isEmpty else {
             searchResults = []
             return
         }
-        
+
         isSearching = true
-        
+
         Task {
             do {
                 let response = try await APIClient.shared.searchFoods(query: searchQuery)
@@ -132,7 +134,7 @@ struct LogView: View {
             }
         }
     }
-    
+
     private func loadCustomFoods() async {
         isLoadingCustomFoods = true
         do {
@@ -143,13 +145,12 @@ struct LogView: View {
         }
         isLoadingCustomFoods = false
     }
-    
+
     private func addToMeal(_ food: FoodItem) {
         let item = MealBuilderItem(
             id: UUID(),
             canonicalName: food.canonicalName,
             displayName: food.canonicalName.capitalized,
-            grams: food.servingGrams,
             baseGrams: food.servingGrams,
             caloriesPer100g: food.calories / food.servingGrams * 100,
             proteinPer100g: food.proteinG / food.servingGrams * 100,
@@ -158,13 +159,12 @@ struct LogView: View {
         )
         mealBuilder.append(item)
     }
-    
+
     private func addCustomFoodToMeal(_ food: CustomFood) {
         let item = MealBuilderItem(
             id: UUID(),
             canonicalName: food.foodName.lowercased(),
             displayName: food.foodName.capitalized,
-            grams: food.servingGrams,
             baseGrams: food.servingGrams,
             caloriesPer100g: food.calories / food.servingGrams * 100,
             proteinPer100g: food.proteinG / food.servingGrams * 100,
@@ -173,21 +173,21 @@ struct LogView: View {
         )
         mealBuilder.append(item)
     }
-    
+
     private func removeItem(_ item: MealBuilderItem) {
         mealBuilder.removeAll { $0.id == item.id }
     }
-    
+
     private func clearBuilder() {
         mealBuilder = []
         mealName = ""
     }
-    
+
     private func saveMeal() {
         guard !mealBuilder.isEmpty else { return }
-        
+
         isSaving = true
-        
+
         let items = mealBuilder.map { item -> MealItemInput in
             MealItemInput(
                 detectedName: item.displayName,
@@ -198,13 +198,13 @@ struct LogView: View {
                 confidence: 1.0
             )
         }
-        
+
         let request = CreateMealRequest(
             mealName: mealName.isEmpty ? "Quick Log" : mealName,
             imagePath: nil,
             items: items
         )
-        
+
         Task {
             do {
                 _ = try await APIClient.shared.createMeal(request)
@@ -229,13 +229,14 @@ struct MealBuilderItem: Identifiable {
     let id: UUID
     let canonicalName: String
     let displayName: String
-    var grams: Double
+    var gramsMultiplier: Double = 1.0
     let baseGrams: Double
     let caloriesPer100g: Double
     let proteinPer100g: Double
     let carbsPer100g: Double
     let fatPer100g: Double
-    
+
+    var grams: Double { baseGrams * gramsMultiplier }
     var totalCalories: Double { grams * caloriesPer100g / 100 }
     var totalProtein: Double { grams * proteinPer100g / 100 }
     var totalCarbs: Double { grams * carbsPer100g / 100 }
@@ -245,7 +246,7 @@ struct MealBuilderItem: Identifiable {
 // MARK: - Meal Builder Summary
 
 struct MealBuilderSummary: View {
-    let items: [MealBuilderItem]
+    @Binding var items: [MealBuilderItem]
     let totalCalories: Double
     let totalProtein: Double
     let totalCarbs: Double
@@ -255,9 +256,9 @@ struct MealBuilderSummary: View {
     let onSave: () -> Void
     let onClear: () -> Void
     let isSaving: Bool
-    
+
     @State private var isExpanded = true
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -268,43 +269,48 @@ struct MealBuilderSummary: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Building Meal")
                             .font(.headline)
+                            .foregroundStyle(Theme.textPrimary)
                         Text("\(items.count) item\(items.count == 1 ? "" : "s") - \(Int(totalCalories)) cal")
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.textMuted)
                     }
-                    
+
                     Spacer()
-                    
+
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textMuted)
                 }
                 .padding()
             }
             .buttonStyle(.plain)
-            
+
             if isExpanded {
                 Divider()
-                
+
                 // Meal name
                 TextField("Meal name (optional)", text: $mealName)
-                    .textFieldStyle(.roundedBorder)
+                    .padding(10)
+                    .background(Color.white.opacity(0.04))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.06)))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .foregroundStyle(Theme.textPrimary)
                     .padding(.horizontal)
                     .padding(.vertical, 8)
-                
+
                 // Items list
-                ForEach(items) { item in
-                    MealBuilderItemRow(item: item, onRemove: { onRemoveItem(item) })
+                ForEach($items) { $item in
+                    MealBuilderItemRow(item: $item, onRemove: { onRemoveItem(item) })
                 }
-                
+
                 // Totals
                 HStack(spacing: 16) {
                     NutritionMiniStat(value: Int(totalCalories), label: "Cal")
                     NutritionMiniStat(value: Int(totalProtein), label: "P", unit: "g")
                     NutritionMiniStat(value: Int(totalCarbs), label: "C", unit: "g")
                     NutritionMiniStat(value: Int(totalFat), label: "F", unit: "g")
-                    
+
                     Spacer()
-                    
+
                     Button(action: onSave) {
                         if isSaving {
                             ProgressView()
@@ -316,7 +322,7 @@ struct MealBuilderSummary: View {
                     }
                     .padding(.horizontal, 24)
                     .padding(.vertical, 10)
-                    .background(Color.accentColor)
+                    .background(Theme.accentGradient)
                     .foregroundStyle(.white)
                     .clipShape(Capsule())
                     .disabled(isSaving)
@@ -324,34 +330,43 @@ struct MealBuilderSummary: View {
                 .padding()
             }
         }
-        .background(Color(.secondarySystemGroupedBackground))
+        .themedCard(glow: true)
     }
 }
 
 struct MealBuilderItemRow: View {
-    let item: MealBuilderItem
+    @Binding var item: MealBuilderItem
     let onRemove: () -> Void
-    
+
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: onRemove) {
-                Image(systemName: "minus.circle.fill")
-                    .foregroundStyle(.red)
-            }
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.displayName)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 12) {
+                Button(action: onRemove) {
+                    Image(systemName: "minus.circle.fill")
+                        .foregroundStyle(Theme.destructive)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.displayName)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("\(Int(item.grams))g")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textMuted)
+                }
+
+                Spacer()
+
+                Text("\(Int(item.totalCalories)) cal")
                     .font(.subheadline)
-                Text("\(Int(item.grams))g")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.calorieValue)
             }
-            
-            Spacer()
-            
-            Text("\(Int(item.totalCalories)) cal")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+
+            PortionSelector(
+                baseGrams: item.baseGrams,
+                selectedMultiplier: $item.gramsMultiplier
+            )
+            .padding(.leading, 22)
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -362,21 +377,23 @@ struct NutritionMiniStat: View {
     let value: Int
     let label: String
     var unit: String = ""
-    
+
     var body: some View {
         VStack(spacing: 2) {
             HStack(spacing: 1) {
                 Text("\(value)")
                     .font(.subheadline)
                     .fontWeight(.semibold)
+                    .foregroundStyle(Theme.textPrimary)
                 if !unit.isEmpty {
                     Text(unit)
                         .font(.caption2)
+                        .foregroundStyle(Theme.textPrimary)
                 }
             }
             Text(label)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textSecondary)
         }
     }
 }
@@ -390,39 +407,45 @@ struct FoodSearchSection: View {
     let onSearch: () -> Void
     let onSelect: (FoodItem) -> Void
     let onAILookup: () -> Void
-    
+
     var body: some View {
         VStack(spacing: 0) {
             // Search bar
             HStack(spacing: 12) {
                 HStack {
                     Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textMuted)
                     TextField("Search foods...", text: $searchQuery)
                         .textFieldStyle(.plain)
+                        .foregroundStyle(Theme.textPrimary)
                         .submitLabel(.search)
                         .onSubmit(onSearch)
-                    
+
                     if !searchQuery.isEmpty {
                         Button {
                             searchQuery = ""
                         } label: {
                             Image(systemName: "xmark.circle.fill")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Theme.textMuted)
                         }
                     }
                 }
                 .padding(10)
-                .background(Color(.tertiarySystemGroupedBackground))
+                .background(Color.white.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.white.opacity(0.06))
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 10))
-                
+
                 Button("Search", action: onSearch)
+                    .tint(Theme.accentGradientStart)
                     .buttonStyle(.borderedProminent)
             }
             .padding()
-            
+
             Divider()
-            
+
             // Results
             if isSearching {
                 ProgressView("Searching...")
@@ -434,7 +457,7 @@ struct FoodSearchSection: View {
                     } description: {
                         Text("No foods found for \"\(searchQuery)\"")
                     }
-                    
+
                     Button {
                         onAILookup()
                     } label: {
@@ -447,17 +470,18 @@ struct FoodSearchSection: View {
                 VStack(spacing: 16) {
                     Image(systemName: "fork.knife")
                         .font(.system(size: 48))
-                        .foregroundStyle(.secondary)
-                    
+                        .foregroundStyle(Theme.textSecondary)
+
                     Text("Search for Foods")
                         .font(.headline)
-                    
+                        .foregroundStyle(Theme.textPrimary)
+
                     Text("Search our database or use AI to find nutrition info for any food")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textSecondary)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
-                    
+
                     Button {
                         onAILookup()
                     } label: {
@@ -471,8 +495,10 @@ struct FoodSearchSection: View {
                     FoodSearchResultRow(food: food)
                         .contentShape(Rectangle())
                         .onTapGesture { onSelect(food) }
+                        .listRowBackground(Theme.cardSurface)
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
         }
     }
@@ -480,13 +506,14 @@ struct FoodSearchSection: View {
 
 struct FoodSearchResultRow: View {
     let food: FoodItem
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(food.canonicalName.capitalized)
                     .font(.body)
-                
+                    .foregroundStyle(Theme.textPrimary)
+
                 HStack(spacing: 8) {
                     Text("\(Int(food.servingGrams))g serving")
                     if let source = food.sourceLabel {
@@ -494,27 +521,30 @@ struct FoodSearchResultRow: View {
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textMuted)
             }
-            
+
             Spacer()
-            
+
             VStack(alignment: .trailing, spacing: 4) {
                 Text("\(Int(food.calories)) cal")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                
+                    .foregroundStyle(Theme.textPrimary)
+
                 HStack(spacing: 6) {
                     Text("P:\(Int(food.proteinG))")
+                        .foregroundStyle(Theme.proteinColor)
                     Text("C:\(Int(food.carbsG))")
+                        .foregroundStyle(Theme.carbsColor)
                     Text("F:\(Int(food.fatG))")
+                        .foregroundStyle(Theme.fatColor)
                 }
                 .font(.caption2)
-                .foregroundStyle(.secondary)
             }
-            
+
             Image(systemName: "plus.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(Theme.successStart)
                 .font(.title3)
         }
         .padding(.vertical, 4)
@@ -528,7 +558,7 @@ struct CustomFoodsSection: View {
     let isLoading: Bool
     let onSelect: (CustomFood) -> Void
     let onRefresh: () async -> Void
-    
+
     var body: some View {
         if isLoading {
             ProgressView("Loading...")
@@ -545,8 +575,10 @@ struct CustomFoodsSection: View {
                 CustomFoodRow(food: food)
                     .contentShape(Rectangle())
                     .onTapGesture { onSelect(food) }
+                    .listRowBackground(Theme.cardSurface)
             }
             .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .refreshable {
                 await onRefresh()
             }
@@ -556,36 +588,40 @@ struct CustomFoodsSection: View {
 
 struct CustomFoodRow: View {
     let food: CustomFood
-    
+
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
                 Text(food.foodName.capitalized)
                     .font(.body)
-                
+                    .foregroundStyle(Theme.textPrimary)
+
                 Text("\(Int(food.servingGrams))g serving")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textMuted)
             }
-            
+
             Spacer()
-            
+
             VStack(alignment: .trailing, spacing: 4) {
                 Text("\(Int(food.calories)) cal")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                
+                    .foregroundStyle(Theme.textPrimary)
+
                 HStack(spacing: 6) {
                     Text("P:\(Int(food.proteinG))")
+                        .foregroundStyle(Theme.proteinColor)
                     Text("C:\(Int(food.carbsG))")
+                        .foregroundStyle(Theme.carbsColor)
                     Text("F:\(Int(food.fatG))")
+                        .foregroundStyle(Theme.fatColor)
                 }
                 .font(.caption2)
-                .foregroundStyle(.secondary)
             }
-            
+
             Image(systemName: "plus.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(Theme.successStart)
                 .font(.title3)
         }
         .padding(.vertical, 4)
@@ -596,84 +632,84 @@ struct CustomFoodRow: View {
 
 struct AIFoodLookupSheet: View {
     let onAddFood: (FoodItem) -> Void
-    
+
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var isLoading = false
     @State private var result: AIFoodResult?
     @State private var errorMessage: String?
-    
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                // Query input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("What food do you want nutrition info for?")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    
-                    TextField("e.g., pad thai, homemade pizza, acai bowl", text: $query)
-                        .textFieldStyle(.roundedBorder)
-                    
-                    Button {
-                        lookupFood()
-                    } label: {
-                        HStack {
-                            if isLoading {
-                                ProgressView()
-                                    .tint(.white)
-                            } else {
-                                Image(systemName: "sparkles")
-                                Text("Ask AI")
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(query.isEmpty || isLoading)
-                }
-                .padding()
-                
-                if let error = errorMessage {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .padding(.horizontal)
-                }
-                
-                // Result
-                if let result = result {
-                    AIFoodResultCard(result: result, onAdd: {
-                        let food = FoodItem(
-                            canonicalName: result.foodName.lowercased(),
-                            servingGrams: result.servingGrams,
-                            calories: result.calories,
-                            proteinG: result.proteinG,
-                            carbsG: result.carbsG,
-                            fatG: result.fatG,
-                            sourceLabel: "AI Estimate"
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Query input
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("What food do you want nutrition info for?")
+                            .font(.subheadline)
+                            .foregroundStyle(Theme.textSecondary)
+
+                        TextField("e.g., pad thai, homemade pizza, acai bowl", text: $query)
+                            .padding(10)
+                            .background(Color.white.opacity(0.04))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.06)))
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                            .foregroundStyle(Theme.textPrimary)
+
+                        GradientButton(
+                            title: "Ask AI",
+                            icon: "sparkles",
+                            isLoading: isLoading,
+                            isDisabled: query.isEmpty,
+                            action: { lookupFood() }
                         )
-                        onAddFood(food)
-                    })
-                    .padding(.horizontal)
+                    }
+                    .padding()
+
+                    if let error = errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(Theme.destructive)
+                            .padding(.horizontal)
+                    }
+
+                    // Result
+                    if let result = result {
+                        AIFoodResultCard(result: result, onAdd: {
+                            let food = FoodItem(
+                                canonicalName: result.foodName.lowercased(),
+                                servingGrams: result.servingGrams,
+                                calories: result.calories,
+                                proteinG: result.proteinG,
+                                carbsG: result.carbsG,
+                                fatG: result.fatG,
+                                sourceLabel: "AI Estimate"
+                            )
+                            onAddFood(food)
+                        })
+                        .padding(.horizontal)
+                    }
+
+                    Spacer()
                 }
-                
-                Spacer()
             }
+            .background(Theme.background)
+            .scrollContentBackground(.hidden)
             .navigationTitle("AI Food Lookup")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
+                        .foregroundStyle(Theme.accent)
                 }
             }
         }
     }
-    
+
     private func lookupFood() {
         isLoading = true
         errorMessage = nil
-        
+
         Task {
             do {
                 let response = try await APIClient.shared.aiLookup(query: query)
@@ -694,55 +730,51 @@ struct AIFoodLookupSheet: View {
 struct AIFoodResultCard: View {
     let result: AIFoodResult
     let onAdd: () -> Void
-    
+
     var body: some View {
         VStack(spacing: 16) {
             HStack {
                 Image(systemName: "sparkles")
-                    .foregroundStyle(.purple)
+                    .foregroundStyle(Theme.accent)
                 Text("AI Estimate")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
                 Spacer()
                 if let confidence = result.confidence {
                     Text("\(Int(confidence * 100))% confidence")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.textMuted)
                 }
             }
-            
+
             VStack(spacing: 8) {
                 Text(result.foodName.capitalized)
                     .font(.headline)
-                
+                    .foregroundStyle(Theme.textPrimary)
+
                 Text("\(Int(result.servingGrams))g serving")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textSecondary)
             }
-            
+
             HStack(spacing: 16) {
                 NutritionMiniStat(value: Int(result.calories), label: "Cal")
                 NutritionMiniStat(value: Int(result.proteinG), label: "Protein", unit: "g")
                 NutritionMiniStat(value: Int(result.carbsG), label: "Carbs", unit: "g")
                 NutritionMiniStat(value: Int(result.fatG), label: "Fat", unit: "g")
             }
-            
+
             if let notes = result.notes, !notes.isEmpty {
                 Text(notes)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.textMuted)
                     .multilineTextAlignment(.center)
             }
-            
-            Button(action: onAdd) {
-                Label("Add to Meal", systemImage: "plus.circle.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
+
+            GradientButton(title: "Add to Meal", icon: "plus.circle.fill", action: onAdd)
         }
         .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .themedCard()
     }
 }
 
