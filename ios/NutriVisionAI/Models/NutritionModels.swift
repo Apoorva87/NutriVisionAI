@@ -27,6 +27,13 @@ struct UserInfo: Codable, Identifiable {
     let email: String
     var isSystem: Bool?
 
+    init(id: Int, name: String, email: String, isSystem: Bool? = nil) {
+        self.id = id
+        self.name = name
+        self.email = email
+        self.isSystem = isSystem
+    }
+
     enum CodingKeys: String, CodingKey {
         case id, name, email
         case isSystem = "is_system"
@@ -40,6 +47,13 @@ struct NutritionTotals: Codable {
     let proteinG: Double
     let carbsG: Double
     let fatG: Double
+
+    init(calories: Double, proteinG: Double, carbsG: Double, fatG: Double) {
+        self.calories = calories
+        self.proteinG = proteinG
+        self.carbsG = carbsG
+        self.fatG = fatG
+    }
 
     enum CodingKeys: String, CodingKey {
         case calories
@@ -55,6 +69,12 @@ struct DashboardResponse: Codable {
     let summary: DashboardSummary
     let recentMeals: [MealRecord]
     let user: UserInfo
+
+    init(summary: DashboardSummary, recentMeals: [MealRecord], user: UserInfo) {
+        self.summary = summary
+        self.recentMeals = recentMeals
+        self.user = user
+    }
 
     enum CodingKeys: String, CodingKey {
         case summary
@@ -256,6 +276,25 @@ struct AnalysisItem: Codable, Identifiable {
     let dbMatch: Bool
     let nutritionAvailable: Bool
 
+    init(detectedName: String, canonicalName: String, portionLabel: String,
+         estimatedGrams: Double, uncertainty: String, confidence: Double,
+         calories: Double, proteinG: Double, carbsG: Double, fatG: Double,
+         visionConfidence: Double, dbMatch: Bool, nutritionAvailable: Bool) {
+        self.detectedName = detectedName
+        self.canonicalName = canonicalName
+        self.portionLabel = portionLabel
+        self.estimatedGrams = estimatedGrams
+        self.uncertainty = uncertainty
+        self.confidence = confidence
+        self.calories = calories
+        self.proteinG = proteinG
+        self.carbsG = carbsG
+        self.fatG = fatG
+        self.visionConfidence = visionConfidence
+        self.dbMatch = dbMatch
+        self.nutritionAvailable = nutritionAvailable
+    }
+
     enum CodingKeys: String, CodingKey {
         case detectedName = "detected_name"
         case canonicalName = "canonical_name"
@@ -276,6 +315,13 @@ struct AnalysisResponse: Codable {
     let items: [AnalysisItem]
     let totals: NutritionTotals
     let providerMetadata: [String: String]
+
+    init(imagePath: String?, items: [AnalysisItem], totals: NutritionTotals, providerMetadata: [String: String]) {
+        self.imagePath = imagePath
+        self.items = items
+        self.totals = totals
+        self.providerMetadata = providerMetadata
+    }
 
     enum CodingKeys: String, CodingKey {
         case imagePath = "image_path"

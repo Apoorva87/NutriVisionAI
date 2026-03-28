@@ -1,5 +1,5 @@
 // FoodAnalysisService — Abstraction layer for food image analysis
-// Supports: Backend API (default) and Apple Foundation Models (iOS 26+)
+// Supports: Backend API (default), OpenAI, Google Gemini, and Apple Foundation Models (iOS 26+)
 
 import Foundation
 import UIKit
@@ -16,25 +16,27 @@ protocol FoodAnalysisProvider {
 
 enum AnalysisProviderType: String, CaseIterable, Identifiable {
     case backend = "Backend API"
+    case openai = "OpenAI"
+    case gemini = "Google Gemini"
     case appleFoundation = "Apple Foundation Models"
-    
+
     var id: String { rawValue }
-    
+
     var description: String {
         switch self {
-        case .backend:
-            return "Uses your server's AI (OpenAI, Anthropic, etc.)"
-        case .appleFoundation:
-            return "On-device Apple AI (iOS 26+, no server needed)"
+        case .backend: return "Uses your local LM Studio server"
+        case .openai: return "Cloud AI via OpenAI (requires API key)"
+        case .gemini: return "Cloud AI via Google Gemini (free tier available)"
+        case .appleFoundation: return "On-device Apple AI (iOS 26+)"
         }
     }
-    
+
     var systemImage: String {
         switch self {
-        case .backend:
-            return "server.rack"
-        case .appleFoundation:
-            return "apple.logo"
+        case .backend: return "server.rack"
+        case .openai: return "brain"
+        case .gemini: return "sparkles"
+        case .appleFoundation: return "apple.logo"
         }
     }
 }
@@ -51,7 +53,9 @@ final class FoodAnalysisService: ObservableObject {
     }
     
     private let backendProvider = BackendAnalysisProvider()
-    
+    private let openaiProvider = OpenAIAnalysisProvider()
+    private let geminiProvider = GeminiAnalysisProvider()
+
     #if APPLE_FOUNDATION_MODELS
     private let appleProvider = AppleFoundationAnalysisProvider()
     #endif
@@ -69,6 +73,10 @@ final class FoodAnalysisService: ObservableObject {
         switch currentProvider {
         case .backend:
             return backendProvider
+        case .openai:
+            return openaiProvider
+        case .gemini:
+            return geminiProvider
         #if APPLE_FOUNDATION_MODELS
         case .appleFoundation:
             return appleProvider
@@ -79,19 +87,35 @@ final class FoodAnalysisService: ObservableObject {
         #endif
         }
     }
-    
+
+    var isCloudMode: Bool {
+        switch currentProvider {
+        case .openai, .gemini, .appleFoundation: return true
+        case .backend: return false
+        }
+    }
+
     var availableProviders: [AnalysisProviderType] {
-        var providers: [AnalysisProviderType] = [.backend]
-        
+        var providers: [AnalysisProviderType] = [.backend, .openai, .gemini]
+
         #if APPLE_FOUNDATION_MODELS
         if appleProvider.isAvailable {
             providers.append(.appleFoundation)
         }
         #endif
-        
+
         return providers
     }
-    
+
+    func syncFromSettings(_ modelProvider: String) {
+        switch modelProvider {
+        case "openai": currentProvider = .openai
+        case "google": currentProvider = .gemini
+        case "lmstudio", "ollama": currentProvider = .backend
+        default: break
+        }
+    }
+
     func analyzeImage(_ image: UIImage) async throws -> AnalysisResponse {
         try await activeProvider.analyzeImage(image)
     }

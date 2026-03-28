@@ -140,44 +140,66 @@ struct AnalyzeView: View {
     }
     
     private func saveMeal() {
-        guard let result = analysisResult else { return }
-        
         let includedItems = editableItems
             .filter { $0.isIncluded }
-            .map { editable -> MealItemInput in
-                MealItemInput(
+            .map { editable -> AnalysisItem in
+                AnalysisItem(
                     detectedName: editable.item.detectedName,
                     canonicalName: editable.item.canonicalName,
                     portionLabel: editable.item.portionLabel,
                     estimatedGrams: editable.adjustedGrams,
                     uncertainty: editable.item.uncertainty,
-                    confidence: editable.item.confidence
+                    confidence: editable.item.confidence,
+                    calories: editable.item.calories * editable.gramsMultiplier,
+                    proteinG: editable.item.proteinG * editable.gramsMultiplier,
+                    carbsG: editable.item.carbsG * editable.gramsMultiplier,
+                    fatG: editable.item.fatG * editable.gramsMultiplier,
+                    visionConfidence: editable.item.visionConfidence,
+                    dbMatch: editable.item.dbMatch,
+                    nutritionAvailable: editable.item.nutritionAvailable
                 )
             }
-        
+
         guard !includedItems.isEmpty else {
             errorMessage = "Please include at least one item"
             return
         }
-        
+
         isSaving = true
-        
-        Task {
-            do {
-                let request = CreateMealRequest(
-                    mealName: mealName.isEmpty ? "Scanned Meal" : mealName,
-                    imagePath: result.imagePath,
-                    items: includedItems
-                )
-                _ = try await APIClient.shared.createMeal(request)
-                await MainActor.run {
-                    isSaving = false
-                    showSuccessAlert = true
-                }
-            } catch {
-                await MainActor.run {
-                    isSaving = false
-                    errorMessage = error.localizedDescription
+
+        if FoodAnalysisService.shared.isCloudMode {
+            let name = mealName.isEmpty ? "Scanned Meal" : mealName
+            let _ = LocalMealStore.shared.saveMeal(name: name, image: capturedImage, items: includedItems)
+            isSaving = false
+            showSuccessAlert = true
+        } else {
+            Task {
+                do {
+                    let mealItems = includedItems.map { item in
+                        MealItemInput(
+                            detectedName: item.detectedName,
+                            canonicalName: item.canonicalName,
+                            portionLabel: item.portionLabel,
+                            estimatedGrams: item.estimatedGrams,
+                            uncertainty: item.uncertainty,
+                            confidence: item.confidence
+                        )
+                    }
+                    let request = CreateMealRequest(
+                        mealName: mealName.isEmpty ? "Scanned Meal" : mealName,
+                        imagePath: analysisResult?.imagePath,
+                        items: mealItems
+                    )
+                    _ = try await APIClient.shared.createMeal(request)
+                    await MainActor.run {
+                        isSaving = false
+                        showSuccessAlert = true
+                    }
+                } catch {
+                    await MainActor.run {
+                        isSaving = false
+                        errorMessage = error.localizedDescription
+                    }
                 }
             }
         }

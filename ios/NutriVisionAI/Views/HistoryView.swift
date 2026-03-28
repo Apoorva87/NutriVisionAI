@@ -67,12 +67,18 @@ struct HistoryView: View {
     private func loadHistory() async {
         isLoading = true
         errorMessage = nil
-        do {
-            historyData = try await APIClient.shared.history(days: selectedDays)
-        } catch {
-            errorMessage = error.localizedDescription
+
+        if FoodAnalysisService.shared.isCloudMode {
+            historyData = LocalMealStore.shared.history(days: selectedDays)
+            isLoading = false
+        } else {
+            do {
+                historyData = try await APIClient.shared.history(days: selectedDays)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isLoading = false
         }
-        isLoading = false
     }
 }
 

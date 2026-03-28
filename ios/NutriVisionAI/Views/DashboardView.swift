@@ -68,21 +68,38 @@ struct DashboardView: View {
     private func loadDashboard() async {
         isLoading = true
         errorMessage = nil
-        do {
-            dashboardData = try await APIClient.shared.dashboard()
-        } catch {
-            errorMessage = error.localizedDescription
+
+        if FoodAnalysisService.shared.isCloudMode {
+            let summary = LocalMealStore.shared.todaySummary()
+            let meals = LocalMealStore.shared.recentMeals()
+            dashboardData = DashboardResponse(
+                summary: summary,
+                recentMeals: meals,
+                user: UserInfo(id: 0, name: "Local", email: "")
+            )
+            isLoading = false
+        } else {
+            do {
+                dashboardData = try await APIClient.shared.dashboard()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            isLoading = false
         }
-        isLoading = false
     }
 
     private func deleteMeal(_ meal: MealRecord) {
-        Task {
-            do {
-                try await APIClient.shared.deleteMeal(id: meal.id)
-                await loadDashboard()
-            } catch {
-                errorMessage = error.localizedDescription
+        if FoodAnalysisService.shared.isCloudMode {
+            LocalMealStore.shared.deleteMeal(id: meal.id)
+            Task { await loadDashboard() }
+        } else {
+            Task {
+                do {
+                    try await APIClient.shared.deleteMeal(id: meal.id)
+                    await loadDashboard()
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
             }
         }
     }
