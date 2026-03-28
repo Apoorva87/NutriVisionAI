@@ -64,6 +64,10 @@ class SettingsPayload(BaseModel):
     lmstudio_base_url: str = "http://localhost:1234"
     lmstudio_vision_model: str = "qwen/qwen3-vl-8b"
     lmstudio_portion_model: str = "qwen/qwen3-vl-8b"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
+    google_api_key: str = ""
+    google_model: str = "gemini-2.0-flash"
 
 
 _EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
