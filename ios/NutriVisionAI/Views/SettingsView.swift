@@ -144,17 +144,18 @@ private struct CloudProviderSheet: View {
                 }
             }
             .onAppear {
-                if let first = models.first, selectedModel.isEmpty {
-                    selectedModel = first
-                }
+                apiKey = KeychainHelper.read(key: "\(provider)_api_key") ?? ""
+                baseURL = UserDefaults.standard.string(forKey: "\(provider)_base_url") ?? ""
+                selectedModel = UserDefaults.standard.string(forKey: "\(provider)_model") ?? models.first ?? ""
             }
         }
     }
 
     private func saveProviderConfig() {
         isSaving = true
-        // Store API key securely — in a real app use KeychainHelper
-        UserDefaults.standard.set(apiKey, forKey: "\(provider)_api_key")
+        if !apiKey.isEmpty {
+            try? KeychainHelper.save(key: "\(provider)_api_key", value: apiKey)
+        }
         UserDefaults.standard.set(selectedModel, forKey: "\(provider)_model")
         if !baseURL.isEmpty {
             UserDefaults.standard.set(baseURL, forKey: "\(provider)_base_url")
@@ -207,7 +208,7 @@ struct SettingsView: View {
 
     // Auth state
     @State private var currentUser: UserInfo?
-    @State private var isLoggedIn = false
+
     @State private var showLoginSheet = false
 
     // Server URL
@@ -416,6 +417,8 @@ struct SettingsView: View {
                         subtitle: "Gemini 1.5 Pro / Flash",
                         isActive: selectedLLMProvider == "google"
                     ) {
+                        selectedLLMProvider = "google"
+                        modelProvider = "google"
                         showProviderSheet = ProviderSheet(id: "google")
                     }
 
@@ -426,6 +429,8 @@ struct SettingsView: View {
                         subtitle: "Claude Sonnet / Haiku",
                         isActive: selectedLLMProvider == "anthropic"
                     ) {
+                        selectedLLMProvider = "anthropic"
+                        modelProvider = "anthropic"
                         showProviderSheet = ProviderSheet(id: "anthropic")
                     }
 
@@ -502,7 +507,10 @@ struct SettingsView: View {
                 await loadSettings()
                 await loadCurrentUser()
             }
-            .alert("Error", isPresented: .constant(errorMessage != nil)) {
+            .alert("Error", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
                 Button("OK") { errorMessage = nil }
             } message: {
                 Text(errorMessage ?? "")
@@ -642,10 +650,8 @@ struct SettingsView: View {
         do {
             let user = try await APIClient.shared.me()
             currentUser = user
-            isLoggedIn = !(user.isSystem ?? true)
         } catch {
             currentUser = nil
-            isLoggedIn = false
         }
     }
 
