@@ -164,7 +164,7 @@ final class LocalMealStore {
         var meals: [MealRecord] = []
 
         queue.sync {
-            let sql = "SELECT id, meal_name, image_path, created_at, total_calories, total_protein_g, total_carbs_g, total_fat_g FROM meals ORDER BY created_at DESC LIMIT ?"
+            let sql = "SELECT id, meal_name, image_path, created_at, total_calories, total_protein_g, total_carbs_g, total_fat_g FROM meals WHERE date(created_at, 'localtime') = date('now', 'localtime') ORDER BY created_at DESC LIMIT ?"
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
@@ -198,7 +198,7 @@ final class LocalMealStore {
         var cal = 0.0, pro = 0.0, carb = 0.0, fat = 0.0
 
         queue.sync {
-            let sql = "SELECT COALESCE(SUM(total_calories), 0), COALESCE(SUM(total_protein_g), 0), COALESCE(SUM(total_carbs_g), 0), COALESCE(SUM(total_fat_g), 0) FROM meals WHERE date(created_at) = date('now')"
+            let sql = "SELECT COALESCE(SUM(total_calories), 0), COALESCE(SUM(total_protein_g), 0), COALESCE(SUM(total_carbs_g), 0), COALESCE(SUM(total_fat_g), 0) FROM meals WHERE date(created_at, 'localtime') = date('now', 'localtime')"
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
@@ -244,7 +244,7 @@ final class LocalMealStore {
 
         queue.sync {
             // Trends: daily sums
-            let trendsSql = "SELECT date(created_at) as day, SUM(total_calories), SUM(total_protein_g), SUM(total_carbs_g), SUM(total_fat_g) FROM meals WHERE created_at >= date('now', '-\(days) days') GROUP BY date(created_at) ORDER BY day"
+            let trendsSql = "SELECT date(created_at, 'localtime') as day, SUM(total_calories), SUM(total_protein_g), SUM(total_carbs_g), SUM(total_fat_g) FROM meals WHERE date(created_at, 'localtime') >= date('now', 'localtime', '-\(days) days') GROUP BY date(created_at, 'localtime') ORDER BY day"
             var stmt: OpaquePointer?
             if sqlite3_prepare_v2(db, trendsSql, -1, &stmt, nil) == SQLITE_OK {
                 defer { sqlite3_finalize(stmt) }
@@ -261,7 +261,7 @@ final class LocalMealStore {
             }
 
             // Grouped meals: all meals in range, grouped by date
-            let mealsSql = "SELECT id, meal_name, image_path, created_at, total_calories, total_protein_g, total_carbs_g, total_fat_g FROM meals WHERE created_at >= date('now', '-\(days) days') ORDER BY created_at DESC"
+            let mealsSql = "SELECT id, meal_name, image_path, created_at, total_calories, total_protein_g, total_carbs_g, total_fat_g FROM meals WHERE date(created_at, 'localtime') >= date('now', 'localtime', '-\(days) days') ORDER BY created_at DESC"
             var mealStmt: OpaquePointer?
             if sqlite3_prepare_v2(db, mealsSql, -1, &mealStmt, nil) == SQLITE_OK {
                 defer { sqlite3_finalize(mealStmt) }
@@ -283,7 +283,7 @@ final class LocalMealStore {
             }
 
             // Top foods
-            let topSql = "SELECT canonical_name, COUNT(*) as cnt, SUM(calories) as total_cal FROM meal_items mi JOIN meals m ON mi.meal_id = m.id WHERE m.created_at >= date('now', '-\(days) days') GROUP BY canonical_name ORDER BY cnt DESC LIMIT 10"
+            let topSql = "SELECT canonical_name, COUNT(*) as cnt, SUM(calories) as total_cal FROM meal_items mi JOIN meals m ON mi.meal_id = m.id WHERE date(m.created_at, 'localtime') >= date('now', 'localtime', '-\(days) days') GROUP BY canonical_name ORDER BY cnt DESC LIMIT 10"
             var topStmt: OpaquePointer?
             if sqlite3_prepare_v2(db, topSql, -1, &topStmt, nil) == SQLITE_OK {
                 defer { sqlite3_finalize(topStmt) }

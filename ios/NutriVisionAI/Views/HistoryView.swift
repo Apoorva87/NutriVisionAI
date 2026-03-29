@@ -2,6 +2,7 @@ import SwiftUI
 import Charts
 
 struct HistoryView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var historyData: HistoryResponse?
     @State private var isLoading = true
     @State private var errorMessage: String?
@@ -60,6 +61,11 @@ struct HistoryView: View {
             }
             .task {
                 await loadHistory()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    Task { await loadHistory() }
+                }
             }
         }
     }

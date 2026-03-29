@@ -1,10 +1,12 @@
 import SwiftUI
 
 struct DashboardView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var dashboardData: DashboardResponse?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var selectedMeal: MealRecord?
+    @State private var lastLoadedDate: String?
 
     var body: some View {
         NavigationStack {
@@ -52,7 +54,17 @@ struct DashboardView: View {
                 await loadDashboard()
             }
             .task {
+                lastLoadedDate = todayString()
                 await loadDashboard()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    let today = todayString()
+                    if today != lastLoadedDate {
+                        lastLoadedDate = today
+                        Task { await loadDashboard() }
+                    }
+                }
             }
             .sheet(item: $selectedMeal) { meal in
                 MealDetailSheet(meal: meal, onDelete: {
@@ -83,6 +95,12 @@ struct DashboardView: View {
             }
             isLoading = false
         }
+    }
+
+    private func todayString() -> String {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd"
+        return fmt.string(from: Date())
     }
 
     private func deleteMeal(_ meal: MealRecord) {
