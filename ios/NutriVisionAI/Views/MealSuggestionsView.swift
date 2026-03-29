@@ -12,7 +12,7 @@ struct MealSuggestionsView: View {
     @State private var calorieBudget: Int = 0
 
     private var remainingSlots: [(name: String, icon: String, calorieShare: Double)] {
-        let hour = Calendar.current.component(.hour, from: Date())
+        let hour = AppTimeZone.currentHour()
         var slots: [(String, String, Double)] = []
         if hour < 10 { slots.append(("breakfast", "☀️", 0.20)) }
         if hour < 14 { slots.append(("lunch", "🍽", 0.35)) }

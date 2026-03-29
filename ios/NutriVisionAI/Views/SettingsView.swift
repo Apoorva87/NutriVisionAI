@@ -276,6 +276,10 @@ struct SettingsView: View {
     @State private var serverURL: String = ""
     @State private var showServerURLSheet = false
 
+    // Timezone
+    @State private var useAutoTimezone = !AppTimeZone.isManual
+    @State private var selectedTimezone: String = AppTimeZone.current.identifier
+
     // Multi-provider
     @State private var selectedLLMProvider: String = "lmstudio"
     @State private var showProviderSheet: ProviderSheet? = nil
@@ -545,6 +549,51 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Theme.cardSurface)
 
+                // Region / Timezone
+                Section {
+                    Toggle("Use Device Timezone", isOn: $useAutoTimezone)
+                        .foregroundStyle(Theme.textPrimary)
+                        .tint(Theme.accent)
+                        .onChange(of: useAutoTimezone) { _, isAuto in
+                            if isAuto {
+                                AppTimeZone.set(nil)
+                                selectedTimezone = TimeZone.current.identifier
+                            } else {
+                                AppTimeZone.set(selectedTimezone)
+                            }
+                        }
+
+                    if !useAutoTimezone {
+                        Picker("Timezone", selection: $selectedTimezone) {
+                            ForEach(Self.commonTimezones, id: \.self) { tzId in
+                                Text(Self.timezoneLabel(tzId))
+                                    .tag(tzId)
+                            }
+                        }
+                        .foregroundStyle(Theme.textPrimary)
+                        .tint(Theme.textSecondary)
+                        .onChange(of: selectedTimezone) { _, newTz in
+                            AppTimeZone.set(newTz)
+                        }
+                    }
+
+                    HStack {
+                        Text("Current")
+                            .foregroundStyle(Theme.textSecondary)
+                        Spacer()
+                        Text(Self.timezoneLabel(AppTimeZone.current.identifier))
+                            .foregroundStyle(Theme.textMuted)
+                            .font(.caption)
+                    }
+                } header: {
+                    Text("Region")
+                        .foregroundStyle(Theme.textMuted)
+                } footer: {
+                    Text("Controls which day meals are grouped under. Change this if you travel or the device timezone is wrong.")
+                        .foregroundStyle(Theme.textMuted)
+                }
+                .listRowBackground(Theme.cardSurface)
+
                 // Save Button
                 Section {
                     GradientButton(title: "Save Settings", isLoading: isSaving) {
@@ -784,6 +833,25 @@ struct SettingsView: View {
                 errorMessage = error.localizedDescription
             }
         }
+    }
+
+    // MARK: - Timezone helpers
+
+    private static let commonTimezones: [String] = {
+        // Group by region, sorted. Include all IANA zones iOS knows about.
+        TimeZone.knownTimeZoneIdentifiers.sorted()
+    }()
+
+    private static func timezoneLabel(_ identifier: String) -> String {
+        guard let tz = TimeZone(identifier: identifier) else { return identifier }
+        let seconds = tz.secondsFromGMT()
+        let h = abs(seconds) / 3600
+        let m = (abs(seconds) % 3600) / 60
+        let sign = seconds >= 0 ? "+" : "-"
+        let offset = String(format: "UTC%@%d:%02d", sign, h, m)
+        // Use the last path component for display (e.g., "America/New_York" → "New York")
+        let city = identifier.components(separatedBy: "/").last?.replacingOccurrences(of: "_", with: " ") ?? identifier
+        return "\(city) (\(offset))"
     }
 }
 

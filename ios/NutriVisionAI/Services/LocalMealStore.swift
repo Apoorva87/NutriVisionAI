@@ -162,14 +162,17 @@ final class LocalMealStore {
     func recentMeals(limit: Int = 10) -> [MealRecord] {
         guard let db = db else { return [] }
         var meals: [MealRecord] = []
+        let today = AppTimeZone.todayString()
+        let offset = AppTimeZone.sqliteOffsetModifier()
 
         queue.sync {
-            let sql = "SELECT id, meal_name, image_path, created_at, total_calories, total_protein_g, total_carbs_g, total_fat_g FROM meals WHERE date(created_at, 'localtime') = date('now', 'localtime') ORDER BY created_at DESC LIMIT ?"
+            let sql = "SELECT id, meal_name, image_path, created_at, total_calories, total_protein_g, total_carbs_g, total_fat_g FROM meals WHERE date(created_at, '\(offset)') = ? ORDER BY created_at DESC LIMIT ?"
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
 
-            sqlite3_bind_int(stmt, 1, Int32(limit))
+            sqlite3_bind_text(stmt, 1, (today as NSString).utf8String, -1, nil)
+            sqlite3_bind_int(stmt, 2, Int32(limit))
 
             while sqlite3_step(stmt) == SQLITE_ROW {
                 let id = Int(sqlite3_column_int(stmt, 0))
@@ -196,13 +199,16 @@ final class LocalMealStore {
     func todaySummary() -> DashboardSummary {
         guard let db = db else { return emptyDashboard() }
         var cal = 0.0, pro = 0.0, carb = 0.0, fat = 0.0
+        let today = AppTimeZone.todayString()
+        let offset = AppTimeZone.sqliteOffsetModifier()
 
         queue.sync {
-            let sql = "SELECT COALESCE(SUM(total_calories), 0), COALESCE(SUM(total_protein_g), 0), COALESCE(SUM(total_carbs_g), 0), COALESCE(SUM(total_fat_g), 0) FROM meals WHERE date(created_at, 'localtime') = date('now', 'localtime')"
+            let sql = "SELECT COALESCE(SUM(total_calories), 0), COALESCE(SUM(total_protein_g), 0), COALESCE(SUM(total_carbs_g), 0), COALESCE(SUM(total_fat_g), 0) FROM meals WHERE date(created_at, '\(offset)') = ?"
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
 
+            sqlite3_bind_text(stmt, 1, (today as NSString).utf8String, -1, nil)
             guard sqlite3_step(stmt) == SQLITE_ROW else { return }
             cal = sqlite3_column_double(stmt, 0)
             pro = sqlite3_column_double(stmt, 1)
@@ -241,13 +247,16 @@ final class LocalMealStore {
         var trends: [[String: AnyCodableValue]] = []
         var groupedMeals: [String: [MealRecord]] = [:]
         var topFoods: [[String: AnyCodableValue]] = []
+        let offset = AppTimeZone.sqliteOffsetModifier()
+        let cutoff = AppTimeZone.formatDate(Date().addingTimeInterval(-Double(days) * 86400))
 
         queue.sync {
-            // Trends: daily sums
-            let trendsSql = "SELECT date(created_at, 'localtime') as day, SUM(total_calories), SUM(total_protein_g), SUM(total_carbs_g), SUM(total_fat_g) FROM meals WHERE date(created_at, 'localtime') >= date('now', 'localtime', '-\(days) days') GROUP BY date(created_at, 'localtime') ORDER BY day"
+            // Trends: daily sums (group by local date)
+            let trendsSql = "SELECT date(created_at, '\(offset)') as day, SUM(total_calories), SUM(total_protein_g), SUM(total_carbs_g), SUM(total_fat_g) FROM meals WHERE date(created_at, '\(offset)') >= ? GROUP BY date(created_at, '\(offset)') ORDER BY day"
             var stmt: OpaquePointer?
             if sqlite3_prepare_v2(db, trendsSql, -1, &stmt, nil) == SQLITE_OK {
                 defer { sqlite3_finalize(stmt) }
+                sqlite3_bind_text(stmt, 1, (cutoff as NSString).utf8String, -1, nil)
                 while sqlite3_step(stmt) == SQLITE_ROW {
                     let day = String(cString: sqlite3_column_text(stmt, 0))
                     trends.append([
@@ -260,11 +269,12 @@ final class LocalMealStore {
                 }
             }
 
-            // Grouped meals: all meals in range, grouped by date
-            let mealsSql = "SELECT id, meal_name, image_path, created_at, total_calories, total_protein_g, total_carbs_g, total_fat_g FROM meals WHERE date(created_at, 'localtime') >= date('now', 'localtime', '-\(days) days') ORDER BY created_at DESC"
+            // Grouped meals: all meals in range, grouped by local date
+            let mealsSql = "SELECT id, meal_name, image_path, created_at, total_calories, total_protein_g, total_carbs_g, total_fat_g FROM meals WHERE date(created_at, '\(offset)') >= ? ORDER BY created_at DESC"
             var mealStmt: OpaquePointer?
             if sqlite3_prepare_v2(db, mealsSql, -1, &mealStmt, nil) == SQLITE_OK {
                 defer { sqlite3_finalize(mealStmt) }
+                sqlite3_bind_text(mealStmt, 1, (cutoff as NSString).utf8String, -1, nil)
                 while sqlite3_step(mealStmt) == SQLITE_ROW {
                     let mealId = Int(sqlite3_column_int(mealStmt, 0))
                     let name = String(cString: sqlite3_column_text(mealStmt, 1))
@@ -277,16 +287,17 @@ final class LocalMealStore {
                         totalCarbsG: sqlite3_column_double(mealStmt, 6),
                         totalFatG: sqlite3_column_double(mealStmt, 7)
                     )
-                    let dayKey = String(createdAt.prefix(10)) // "YYYY-MM-DD"
+                    let dayKey = AppTimeZone.localDateString(from: createdAt)
                     groupedMeals[dayKey, default: []].append(meal)
                 }
             }
 
             // Top foods
-            let topSql = "SELECT canonical_name, COUNT(*) as cnt, SUM(calories) as total_cal FROM meal_items mi JOIN meals m ON mi.meal_id = m.id WHERE date(m.created_at, 'localtime') >= date('now', 'localtime', '-\(days) days') GROUP BY canonical_name ORDER BY cnt DESC LIMIT 10"
+            let topSql = "SELECT canonical_name, COUNT(*) as cnt, SUM(calories) as total_cal FROM meal_items mi JOIN meals m ON mi.meal_id = m.id WHERE date(m.created_at, '\(offset)') >= ? GROUP BY canonical_name ORDER BY cnt DESC LIMIT 10"
             var topStmt: OpaquePointer?
             if sqlite3_prepare_v2(db, topSql, -1, &topStmt, nil) == SQLITE_OK {
                 defer { sqlite3_finalize(topStmt) }
+                sqlite3_bind_text(topStmt, 1, (cutoff as NSString).utf8String, -1, nil)
                 while sqlite3_step(topStmt) == SQLITE_ROW {
                     let foodName = String(cString: sqlite3_column_text(topStmt, 0))
                     topFoods.append([

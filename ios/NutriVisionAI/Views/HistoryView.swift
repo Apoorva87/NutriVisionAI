@@ -151,9 +151,10 @@ struct CalorieTrendChart: View {
             default: return nil
             }
 
-            // Parse date
+            // Parse date (dates are already in local timezone from SQLite)
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
+            formatter.timeZone = AppTimeZone.current
             guard let date = formatter.date(from: dateString) else { return nil }
 
             // Also get protein, carbs, fat
@@ -391,10 +392,12 @@ struct DayMealsCard: View {
     private var formattedDate: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
+        formatter.timeZone = AppTimeZone.current
         guard let date = formatter.date(from: dateString) else { return dateString }
 
         let displayFormatter = DateFormatter()
         displayFormatter.dateStyle = .medium
+        displayFormatter.timeZone = AppTimeZone.current
         return displayFormatter.string(from: date)
     }
 
@@ -484,6 +487,7 @@ struct DayMealsCard: View {
 
         let timeFormatter = DateFormatter()
         timeFormatter.timeStyle = .short
+        timeFormatter.timeZone = AppTimeZone.current
         return timeFormatter.string(from: date)
     }
 }

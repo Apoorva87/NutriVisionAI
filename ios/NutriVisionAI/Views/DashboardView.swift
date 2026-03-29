@@ -98,9 +98,7 @@ struct DashboardView: View {
     }
 
     private func todayString() -> String {
-        let fmt = DateFormatter()
-        fmt.dateFormat = "yyyy-MM-dd"
-        return fmt.string(from: Date())
+        AppTimeZone.todayString()
     }
 
     private func deleteMeal(_ meal: MealRecord) {
@@ -285,12 +283,12 @@ struct MealRowCard: View {
     }
 
     private var formattedTime: String {
-        // Parse ISO date and format to time
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = formatter.date(from: meal.createdAt) {
             let timeFormatter = DateFormatter()
             timeFormatter.timeStyle = .short
+            timeFormatter.timeZone = AppTimeZone.current
             return timeFormatter.string(from: date)
         }
         return meal.createdAt
