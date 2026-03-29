@@ -92,6 +92,33 @@ struct LogView: View {
             .task {
                 await loadCustomFoods()
             }
+            .task(id: searchQuery) {
+                let query = searchQuery.trimmingCharacters(in: .whitespaces)
+                guard !query.isEmpty else {
+                    searchResults = []
+                    return
+                }
+                // Debounce 300ms — task auto-cancels if searchQuery changes
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled else { return }
+
+                if FoodAnalysisService.shared.isCloudMode {
+                    searchResults = NutritionDB.shared.search(query: query)
+                } else {
+                    isSearching = true
+                    do {
+                        let response = try await APIClient.shared.searchFoods(query: query)
+                        if !Task.isCancelled {
+                            searchResults = response.items
+                        }
+                    } catch {
+                        if !Task.isCancelled {
+                            searchResults = []
+                        }
+                    }
+                    isSearching = false
+                }
+            }
             .alert("Meal Saved", isPresented: $showSuccessAlert) {
                 Button("OK") { }
             } message: {
@@ -443,8 +470,6 @@ struct FoodSearchSection: View {
     let onSelect: (FoodItem) -> Void
     let onAILookup: () -> Void
 
-    @State private var debounceTask: Task<Void, Never>?
-
     var body: some View {
         VStack(spacing: 0) {
             // Search bar
@@ -455,16 +480,9 @@ struct FoodSearchSection: View {
                     TextField("Search foods...", text: $searchQuery)
                         .textFieldStyle(.plain)
                         .foregroundStyle(Theme.textPrimary)
+                        .autocorrectionDisabled()
                         .submitLabel(.search)
                         .onSubmit(onSearch)
-                        .onChange(of: searchQuery) { _ in
-                            debounceTask?.cancel()
-                            debounceTask = Task {
-                                try? await Task.sleep(nanoseconds: 250_000_000) // 250ms debounce
-                                guard !Task.isCancelled else { return }
-                                await MainActor.run { onSearch() }
-                            }
-                        }
 
                     if !searchQuery.isEmpty {
                         Button {

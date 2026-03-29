@@ -12,14 +12,19 @@ final class GeminiAnalysisProvider: FoodAnalysisProvider {
     }
 
     func analyzeImage(_ image: UIImage) async throws -> AnalysisResponse {
-        guard let apiKey = KeychainHelper.read(key: "google_api_key"), !apiKey.isEmpty else {
+        let apiKey = KeychainHelper.read(key: "google_api_key")
+        print("Gemini: API key present = \(apiKey != nil), length = \(apiKey?.count ?? 0)")
+        guard let apiKey, !apiKey.isEmpty else {
             throw AnalysisError.providerUnavailable("Google API key not configured. Go to Settings to add it.")
         }
-        guard let imageData = image.jpegData(compressionQuality: 0.7) else {
+        // Resize to max 1024px to stay within Gemini's token limits
+        let resized = Self.resizeImage(image, maxDimension: 1024)
+        guard let imageData = resized.jpegData(compressionQuality: 0.7) else {
             throw AnalysisError.imageConversionFailed
         }
+        print("Gemini: sending image \(imageData.count / 1024)KB (\(Int(resized.size.width))x\(Int(resized.size.height)))")
 
-        let model = UserDefaults.standard.string(forKey: "google_model") ?? "gemini-2.0-flash"
+        let model = UserDefaults.standard.string(forKey: "google_model") ?? "gemini-2.5-flash"
         let base64Image = imageData.base64EncodedString()
 
         let prompt = """
@@ -61,13 +66,17 @@ final class GeminiAnalysisProvider: FoodAnalysisProvider {
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
         request.timeoutInterval = 30
 
+        print("Gemini: requesting \(model) at \(urlString.prefix(80))...")
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AnalysisError.networkError("Invalid response")
         }
+        print("Gemini: HTTP \(httpResponse.statusCode), response \(data.count) bytes")
         if httpResponse.statusCode == 429 {
-            throw AnalysisError.providerUnavailable("Gemini rate limit reached. Free tier allows 15 requests per minute. Please wait and try again.")
+            let errorBody = String(data: data, encoding: .utf8) ?? "no body"
+            print("Gemini 429 response: \(errorBody)")
+            throw AnalysisError.providerUnavailable("Gemini rate limit reached. Details: \(errorBody)")
         }
         if httpResponse.statusCode == 400 || httpResponse.statusCode == 403 {
             throw AnalysisError.providerUnavailable("Invalid Google API key. Check Settings.")
@@ -131,5 +140,16 @@ final class GeminiAnalysisProvider: FoodAnalysisProvider {
             totals: totals,
             providerMetadata: ["provider": "gemini", "model": model]
         )
+    }
+
+    private static func resizeImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let size = image.size
+        guard max(size.width, size.height) > maxDimension else { return image }
+        let scale = maxDimension / max(size.width, size.height)
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
     }
 }

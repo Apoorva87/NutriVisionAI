@@ -256,6 +256,16 @@ struct RecentMealsSection: View {
 struct MealRowCard: View {
     let meal: MealRecord
 
+    /// Load a locally-saved meal image by filename from Documents/MealImages/
+    static func loadLocalMealImage(_ path: String) -> UIImage? {
+        // If it's just a filename (not a URL path), look in local MealImages dir
+        guard !path.hasPrefix("/"), !path.hasPrefix("http") else { return nil }
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let fileURL = docs.appendingPathComponent("MealImages").appendingPathComponent(path)
+        guard let data = try? Data(contentsOf: fileURL) else { return nil }
+        return UIImage(data: data)
+    }
+
     private var formattedTime: String {
         // Parse ISO date and format to time
         let formatter = ISO8601DateFormatter()
@@ -272,17 +282,29 @@ struct MealRowCard: View {
         HStack(spacing: 12) {
             // Meal image or placeholder
             if let imagePath = meal.imagePath, !imagePath.isEmpty {
-                AsyncImage(url: URL(string: "\(APIClient.shared.baseURL)\(imagePath)")) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
+                Group {
+                    if let localImage = Self.loadLocalMealImage(imagePath) {
+                        Image(uiImage: localImage)
                             .resizable()
                             .aspectRatio(contentMode: .fill)
-                    case .failure:
+                    } else if imagePath.hasPrefix("/") {
+                        // Server-relative path (backend mode)
+                        AsyncImage(url: URL(string: "\(APIClient.shared.baseURL)\(imagePath)")) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            case .failure:
+                                Image(systemName: "photo")
+                                    .foregroundStyle(Theme.textMuted)
+                            default:
+                                ProgressView()
+                            }
+                        }
+                    } else {
                         Image(systemName: "photo")
                             .foregroundStyle(Theme.textMuted)
-                    default:
-                        ProgressView()
                     }
                 }
                 .frame(width: 56, height: 56)
@@ -343,18 +365,27 @@ struct MealDetailSheet: View {
                 VStack(spacing: 20) {
                     // Meal Image
                     if let imagePath = meal.imagePath, !imagePath.isEmpty {
-                        AsyncImage(url: URL(string: "\(APIClient.shared.baseURL)\(imagePath)")) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
+                        Group {
+                            if let localImage = MealRowCard.loadLocalMealImage(imagePath) {
+                                Image(uiImage: localImage)
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                            case .failure:
-                                EmptyView()
-                            default:
-                                ProgressView()
-                                    .frame(height: 200)
+                            } else if imagePath.hasPrefix("/") {
+                                AsyncImage(url: URL(string: "\(APIClient.shared.baseURL)\(imagePath)")) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fit)
+                                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    case .failure:
+                                        EmptyView()
+                                    default:
+                                        ProgressView()
+                                            .frame(height: 200)
+                                    }
+                                }
                             }
                         }
                         .frame(maxHeight: 250)

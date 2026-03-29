@@ -12,7 +12,7 @@ data/imports/**
 
 # iOS / Xcode
 ios/*/build/
-ios/*/*.xcodeproj/xcuserdata/
+ios/*/*.xcodeproj/
 ios/*/*.xcworkspace/xcuserdata/
 *.xcuserstate
 DerivedData/

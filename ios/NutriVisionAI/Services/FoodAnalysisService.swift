@@ -18,6 +18,7 @@ enum AnalysisProviderType: String, CaseIterable, Identifiable {
     case backend = "Backend API"
     case openai = "OpenAI"
     case gemini = "Google Gemini"
+    case openrouter = "OpenRouter"
     case appleFoundation = "Apple Foundation Models"
 
     var id: String { rawValue }
@@ -27,6 +28,7 @@ enum AnalysisProviderType: String, CaseIterable, Identifiable {
         case .backend: return "Uses your local LM Studio server"
         case .openai: return "Cloud AI via OpenAI (requires API key)"
         case .gemini: return "Cloud AI via Google Gemini (free tier available)"
+        case .openrouter: return "Free router + 200+ models (Qwen, Llama, etc.)"
         case .appleFoundation: return "On-device Apple AI (iOS 26+)"
         }
     }
@@ -36,6 +38,7 @@ enum AnalysisProviderType: String, CaseIterable, Identifiable {
         case .backend: return "server.rack"
         case .openai: return "brain"
         case .gemini: return "sparkles"
+        case .openrouter: return "arrow.triangle.branch"
         case .appleFoundation: return "apple.logo"
         }
     }
@@ -55,6 +58,7 @@ final class FoodAnalysisService: ObservableObject {
     private let backendProvider = BackendAnalysisProvider()
     private let openaiProvider = OpenAIAnalysisProvider()
     private let geminiProvider = GeminiAnalysisProvider()
+    private let openrouterProvider = OpenRouterAnalysisProvider()
 
     #if APPLE_FOUNDATION_MODELS
     private let appleProvider = AppleFoundationAnalysisProvider()
@@ -77,6 +81,8 @@ final class FoodAnalysisService: ObservableObject {
             return openaiProvider
         case .gemini:
             return geminiProvider
+        case .openrouter:
+            return openrouterProvider
         #if APPLE_FOUNDATION_MODELS
         case .appleFoundation:
             return appleProvider
@@ -90,13 +96,13 @@ final class FoodAnalysisService: ObservableObject {
 
     var isCloudMode: Bool {
         switch currentProvider {
-        case .openai, .gemini, .appleFoundation: return true
+        case .openai, .gemini, .openrouter, .appleFoundation: return true
         case .backend: return false
         }
     }
 
     var availableProviders: [AnalysisProviderType] {
-        var providers: [AnalysisProviderType] = [.backend, .openai, .gemini]
+        var providers: [AnalysisProviderType] = [.backend, .openai, .gemini, .openrouter]
 
         #if APPLE_FOUNDATION_MODELS
         if appleProvider.isAvailable {
@@ -111,6 +117,7 @@ final class FoodAnalysisService: ObservableObject {
         switch modelProvider {
         case "openai": currentProvider = .openai
         case "google": currentProvider = .gemini
+        case "openrouter": currentProvider = .openrouter
         case "lmstudio", "ollama": currentProvider = .backend
         default: break
         }

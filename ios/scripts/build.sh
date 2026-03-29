@@ -95,7 +95,7 @@ xcodebuild -project NutriVisionAI.xcodeproj \
     -scheme "$SCHEME" \
     -configuration "$CONFIG" \
     -sdk iphonesimulator \
-    -destination 'platform=iOS Simulator,name=iPhone 16 Pro' \
+    -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
     build
 
 if [ $? -eq 0 ]; then

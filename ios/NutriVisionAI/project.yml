@@ -43,9 +43,9 @@ targets:
           - ".build"
           - ".DS_Store"
           - Data
-    resources:
       - path: Data
         type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: NutriVisionAI

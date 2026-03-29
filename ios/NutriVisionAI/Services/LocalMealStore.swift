@@ -67,11 +67,15 @@ final class LocalMealStore {
         queue.sync {
             // Save image to disk if provided
             var imagePath: String? = nil
-            if let image = image, let data = image.jpegData(compressionQuality: 0.5) {
-                let filename = "\(UUID().uuidString).jpg"
-                let fileURL = imagesDir.appendingPathComponent(filename)
-                try? data.write(to: fileURL)
-                imagePath = filename
+            if let image = image {
+                // Save a small thumbnail (max 256px) to minimize storage
+                let thumbnail = Self.resizeImage(image, maxDimension: 256)
+                if let data = thumbnail.jpegData(compressionQuality: 0.4) {
+                    let filename = "\(UUID().uuidString).jpg"
+                    let fileURL = imagesDir.appendingPathComponent(filename)
+                    try? data.write(to: fileURL)
+                    imagePath = filename
+                }
             }
 
             // Calculate totals
@@ -298,7 +302,21 @@ final class LocalMealStore {
     }
 }
 
-// Helper
+// MARK: - Helpers
+
+extension LocalMealStore {
+    static func resizeImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let size = image.size
+        guard max(size.width, size.height) > maxDimension else { return image }
+        let scale = maxDimension / max(size.width, size.height)
+        let newSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: newSize)
+        return renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: newSize))
+        }
+    }
+}
+
 private extension Int {
     var nonZero: Int? { self == 0 ? nil : self }
 }

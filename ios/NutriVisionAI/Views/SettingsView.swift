@@ -24,6 +24,7 @@ private struct CloudProviderSheet: View {
         case "openai": return "OpenAI"
         case "google": return "Google AI"
         case "anthropic": return "Anthropic"
+        case "openrouter": return "OpenRouter"
         default: return provider.capitalized
         }
     }
@@ -31,14 +32,41 @@ private struct CloudProviderSheet: View {
     private var models: [String] {
         switch provider {
         case "openai": return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]
-        case "google": return ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-pro", "gemini-1.5-flash"]
+        case "google": return ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
         case "anthropic": return ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"]
+        case "openrouter": return [
+            "openrouter/free",
+            "qwen/qwen3-vl-235b-a22b-instruct",
+            "google/gemini-2.5-flash-preview",
+            "openai/gpt-4o-mini",
+            "meta-llama/llama-4-maverick"
+        ]
         default: return []
         }
     }
 
     private var isComingSoon: Bool {
-        provider == "google" || provider == "anthropic"
+        provider == "anthropic"
+    }
+
+    private var apiKeyURL: URL? {
+        switch provider {
+        case "openai": return URL(string: "https://platform.openai.com/api-keys")
+        case "google": return URL(string: "https://aistudio.google.com/apikey")
+        case "anthropic": return URL(string: "https://console.anthropic.com/settings/keys")
+        case "openrouter": return URL(string: "https://openrouter.ai/settings/keys")
+        default: return nil
+        }
+    }
+
+    private var usageURL: URL? {
+        switch provider {
+        case "openai": return URL(string: "https://platform.openai.com/usage")
+        case "google": return URL(string: "https://aistudio.google.com/usage")
+        case "anthropic": return URL(string: "https://console.anthropic.com/settings/usage")
+        case "openrouter": return URL(string: "https://openrouter.ai/settings/credits")
+        default: return nil
+        }
     }
 
     var body: some View {
@@ -62,8 +90,41 @@ private struct CloudProviderSheet: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .foregroundStyle(Theme.textPrimary)
+
+                    if let url = apiKeyURL {
+                        Link(destination: url) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "key.fill")
+                                    .foregroundStyle(Theme.accent)
+                                Text("Get your \(providerTitle) API key")
+                                    .foregroundStyle(Theme.accent)
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.textMuted)
+                            }
+                        }
+                    }
+
+                    if let url = usageURL {
+                        Link(destination: url) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "chart.bar.fill")
+                                    .foregroundStyle(Theme.textSecondary)
+                                Text("View API usage & quotas")
+                                    .foregroundStyle(Theme.textSecondary)
+                                Spacer()
+                                Image(systemName: "arrow.up.right.square")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.textMuted)
+                            }
+                        }
+                    }
                 } header: {
                     Text("Authentication")
+                        .foregroundStyle(Theme.textMuted)
+                } footer: {
+                    Text("Opens \(providerTitle) in Safari. Sign in, copy your API key, then paste it above.")
                         .foregroundStyle(Theme.textMuted)
                 }
                 .listRowBackground(Theme.cardSurface)
@@ -420,6 +481,18 @@ struct SettingsView: View {
                         selectedLLMProvider = "google"
                         modelProvider = "google"
                         showProviderSheet = ProviderSheet(id: "google")
+                    }
+
+                    providerCard(
+                        icon: "arrow.triangle.branch",
+                        iconGradient: [Color(red: 139/255, green: 92/255, blue: 246/255), Color(red: 168/255, green: 85/255, blue: 247/255)],
+                        title: "OpenRouter",
+                        subtitle: "Qwen3-VL, Llama, GPT, Gemini",
+                        isActive: selectedLLMProvider == "openrouter"
+                    ) {
+                        selectedLLMProvider = "openrouter"
+                        modelProvider = "openrouter"
+                        showProviderSheet = ProviderSheet(id: "openrouter")
                     }
 
                     providerCard(
