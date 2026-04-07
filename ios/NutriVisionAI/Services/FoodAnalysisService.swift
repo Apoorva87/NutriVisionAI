@@ -69,7 +69,7 @@ final class FoodAnalysisService: ObservableObject {
            let provider = AnalysisProviderType(rawValue: saved) {
             self.currentProvider = provider
         } else {
-            self.currentProvider = .backend
+            self.currentProvider = .gemini
         }
     }
     
@@ -125,6 +125,164 @@ final class FoodAnalysisService: ObservableObject {
 
     func analyzeImage(_ image: UIImage) async throws -> AnalysisResponse {
         try await activeProvider.analyzeImage(image)
+    }
+
+    /// Text-only LLM chat that routes through the active cloud provider or backend.
+    func chatCompletion(prompt: String, userMessage: String) async throws -> String {
+        if isCloudMode {
+            return try await cloudChat(prompt: prompt, userMessage: userMessage)
+        } else {
+            let messages = [
+                LLMMessage(role: "system", content: prompt),
+                LLMMessage(role: "user", content: userMessage),
+            ]
+            let model = UserDefaults.standard.string(forKey: "model_provider") ?? "default"
+            return try await APIClient.shared.llmChat(model: model, messages: messages)
+        }
+    }
+
+    private func cloudChat(prompt: String, userMessage: String) async throws -> String {
+        let fullPrompt = "\(prompt)\n\nUser: \(userMessage)"
+
+        switch currentProvider {
+        case .gemini:
+            return try await geminiTextChat(prompt: fullPrompt)
+        case .openai:
+            return try await openAITextChat(systemPrompt: prompt, userMessage: userMessage)
+        case .openrouter:
+            return try await openRouterTextChat(systemPrompt: prompt, userMessage: userMessage)
+        default:
+            throw AnalysisError.providerUnavailable("Text chat not available for \(currentProvider.rawValue)")
+        }
+    }
+
+    private func geminiTextChat(prompt: String) async throws -> String {
+        guard let apiKey = KeychainHelper.read(key: "google_api_key"), !apiKey.isEmpty else {
+            throw AnalysisError.providerUnavailable("Google API key not configured")
+        }
+        let model = UserDefaults.standard.string(forKey: "google_model") ?? "gemini-2.5-flash"
+        let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent?key=\(apiKey)")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "contents": [["parts": [["text": prompt]]]],
+            "generationConfig": [
+                "temperature": 0.7,
+                "responseMimeType": "application/json",
+                "thinkingConfig": ["thinkingBudget": 0]  // Skip reasoning for speed
+            ]
+        ] as [String: Any])
+
+        let start = CFAbsoluteTimeGetCurrent()
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            NetworkLogger.shared.log(provider: "gemini", action: "text_chat", durationMs: ms, status: "error",
+                                      errorMessage: "HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+            throw AnalysisError.networkError("Gemini HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0): \(body.prefix(200))")
+        }
+        NetworkLogger.shared.log(provider: "gemini", action: "text_chat", durationMs: ms, status: "ok", responseSizeBytes: data.count)
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let candidates = json["candidates"] as? [[String: Any]],
+              let content = candidates.first?["content"] as? [String: Any],
+              let parts = content["parts"] as? [[String: Any]],
+              let text = parts.first?["text"] as? String else {
+            throw AnalysisError.parsingFailed("Could not parse Gemini text response")
+        }
+        return text
+    }
+
+    private func openAITextChat(systemPrompt: String, userMessage: String) async throws -> String {
+        guard let apiKey = KeychainHelper.read(key: "openai_api_key"), !apiKey.isEmpty else {
+            throw AnalysisError.providerUnavailable("OpenAI API key not configured")
+        }
+        let model = UserDefaults.standard.string(forKey: "openai_model") ?? "gpt-4o-mini"
+        let base = UserDefaults.standard.string(forKey: "openai_base_url") ?? "https://api.openai.com/v1"
+        let url = URL(string: "\(base)/chat/completions")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 30
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "model": model,
+            "temperature": 0.7,
+            "messages": [
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": userMessage]
+            ]
+        ] as [String: Any])
+
+        let openaiStart = CFAbsoluteTimeGetCurrent()
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let openaiMs = Int((CFAbsoluteTimeGetCurrent() - openaiStart) * 1000)
+
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            NetworkLogger.shared.log(provider: "openai", action: "text_chat", durationMs: openaiMs, status: "error",
+                                      errorMessage: "HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+            throw AnalysisError.networkError("OpenAI HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0): \(body.prefix(200))")
+        }
+        NetworkLogger.shared.log(provider: "openai", action: "text_chat", durationMs: openaiMs, status: "ok", responseSizeBytes: data.count)
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            throw AnalysisError.parsingFailed("Could not parse OpenAI response")
+        }
+        return content
+    }
+
+    private func openRouterTextChat(systemPrompt: String, userMessage: String) async throws -> String {
+        guard let apiKey = KeychainHelper.read(key: "openrouter_api_key"), !apiKey.isEmpty else {
+            throw AnalysisError.providerUnavailable("OpenRouter API key not configured")
+        }
+        let model = UserDefaults.standard.string(forKey: "openrouter_model") ?? "openrouter/auto"
+        let base = UserDefaults.standard.string(forKey: "openrouter_base_url") ?? "https://openrouter.ai/api/v1"
+        let url = URL(string: "\(base)/chat/completions")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("NutriVisionAI", forHTTPHeaderField: "X-Title")
+        request.timeoutInterval = 30
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "model": model,
+            "temperature": 0.7,
+            "messages": [
+                ["role": "system", "content": systemPrompt],
+                ["role": "user", "content": userMessage]
+            ]
+        ] as [String: Any])
+
+        let orStart = CFAbsoluteTimeGetCurrent()
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let orMs = Int((CFAbsoluteTimeGetCurrent() - orStart) * 1000)
+
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            NetworkLogger.shared.log(provider: "openrouter", action: "text_chat", durationMs: orMs, status: "error",
+                                      errorMessage: "HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0)")
+            throw AnalysisError.networkError("OpenRouter HTTP \((response as? HTTPURLResponse)?.statusCode ?? 0): \(body.prefix(200))")
+        }
+        NetworkLogger.shared.log(provider: "openrouter", action: "text_chat", durationMs: orMs, status: "ok", responseSizeBytes: data.count)
+
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any],
+              let content = message["content"] as? String else {
+            throw AnalysisError.parsingFailed("Could not parse OpenRouter response")
+        }
+        return content
     }
 }
 

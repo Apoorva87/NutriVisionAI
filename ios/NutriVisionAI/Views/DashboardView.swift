@@ -36,6 +36,9 @@ struct DashboardView: View {
                             settings: nil
                         )
 
+                        // Grocery List shortcut
+                        GroceryCard()
+
                         // Recent Meals
                         RecentMealsSection(
                             meals: data.recentMeals,
@@ -254,13 +257,6 @@ struct RecentMealsSection: View {
                     MealRowCard(meal: meal)
                         .contentShape(Rectangle())
                         .onTapGesture { onSelect(meal) }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                            Button(role: .destructive) {
-                                onDelete(meal)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
                 }
             }
         }
@@ -447,10 +443,16 @@ struct MealDetailSheet: View {
             }
             .confirmationDialog("Delete Meal", isPresented: $showDeleteConfirmation) {
                 Button("Delete", role: .destructive) {
-                    Task {
-                        try? await APIClient.shared.deleteMeal(id: meal.id)
+                    if FoodAnalysisService.shared.isCloudMode {
+                        LocalMealStore.shared.deleteMeal(id: meal.id)
                         onDelete()
                         dismiss()
+                    } else {
+                        Task {
+                            try? await APIClient.shared.deleteMeal(id: meal.id)
+                            onDelete()
+                            dismiss()
+                        }
                     }
                 }
             } message: {
@@ -481,6 +483,55 @@ struct NutritionStatView: View {
                 .foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - Grocery Card
+
+struct GroceryCard: View {
+    @State private var cartCount = 0
+
+    var body: some View {
+        NavigationLink(destination: GroceryListView()) {
+            HStack(spacing: 12) {
+                Image(systemName: "cart.fill")
+                    .font(.title3)
+                    .foregroundStyle(Theme.accent)
+                    .frame(width: 40, height: 40)
+                    .background(Theme.accent.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Grocery List")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("AI-powered weekly shopping")
+                        .font(.caption)
+                        .foregroundStyle(Theme.textSecondary)
+                }
+
+                Spacer()
+
+                if cartCount > 0 {
+                    Text("\(cartCount)")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Theme.accent)
+                        .clipShape(Capsule())
+                }
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(Theme.textMuted)
+            }
+            .padding()
+            .themedCard()
+        }
+        .onAppear { cartCount = GroceryCartStore.shared.itemCount() }
     }
 }
 

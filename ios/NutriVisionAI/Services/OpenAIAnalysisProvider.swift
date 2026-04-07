@@ -26,13 +26,14 @@ final class OpenAIAnalysisProvider: FoodAnalysisProvider {
         Analyze this food photo for nutrition logging. For each food item visible:
         1. Identify the food (detected_name: what you see, canonical_name: standard database name)
         2. Estimate portion in grams
-        3. Rate your confidence (0.0-1.0)
+        3. Estimate nutrition for that portion: calories, protein_g, carbs_g, fat_g
+        4. Rate your confidence (0.0-1.0)
 
-        For multi-dish plates, identify each component separately (rice, curry, bread, etc).
-        Prefer 4-10 items when multiple dishes are visible.
-        Use short canonical names that map to a nutrition database.
+        For composite/mixed dishes (biryani, pad thai, chia seed pudding), return ONE item for the whole dish with total nutrition.
+        For clearly separate items on a plate (rice + curry + bread), return each component separately.
+        Prefer 3-8 items. Use short canonical names that map to a nutrition database.
 
-        Return strict JSON: {"items": [{"detected_name": "...", "canonical_name": "...", "portion_label": "small|medium|large", "estimated_grams": 150.0, "confidence": 0.85}]}
+        Return strict JSON: {"items": [{"detected_name": "...", "canonical_name": "...", "portion_label": "small|medium|large", "estimated_grams": 150.0, "confidence": 0.85, "calories": 250.0, "protein_g": 10.0, "carbs_g": 30.0, "fat_g": 8.0}]}
         """
 
         let requestBody: [String: Any] = [
@@ -60,15 +61,23 @@ final class OpenAIAnalysisProvider: FoodAnalysisProvider {
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
         request.timeoutInterval = 30
 
+        let start = CFAbsoluteTimeGetCurrent()
         let (data, response) = try await URLSession.shared.data(for: request)
+        let durationMs = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
 
         guard let httpResponse = response as? HTTPURLResponse else {
+            NetworkLogger.shared.log(provider: "openai", action: "analyze_image", durationMs: durationMs, status: "error", errorMessage: "Invalid response")
             throw AnalysisError.networkError("Invalid response")
         }
+        let httpOk = (200...299).contains(httpResponse.statusCode)
+        NetworkLogger.shared.log(provider: "openai", action: "analyze_image", durationMs: durationMs,
+                                  status: httpOk ? "ok" : "error",
+                                  errorMessage: httpOk ? nil : "HTTP \(httpResponse.statusCode)",
+                                  responseSizeBytes: data.count)
         if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
             throw AnalysisError.providerUnavailable("Invalid OpenAI API key. Check Settings.")
         }
-        guard (200...299).contains(httpResponse.statusCode) else {
+        guard httpOk else {
             let body = String(data: data, encoding: .utf8) ?? ""
             throw AnalysisError.networkError("OpenAI returned HTTP \(httpResponse.statusCode): \(body)")
         }
@@ -77,11 +86,22 @@ final class OpenAIAnalysisProvider: FoodAnalysisProvider {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let message = choices.first?["message"] as? [String: Any],
-              let content = message["content"] as? String,
-              let contentData = content.data(using: .utf8),
+              let content = message["content"] as? String else {
+            throw AnalysisError.parsingFailed("Could not parse OpenAI response structure")
+        }
+
+        // Strip markdown fences if present
+        var jsonText = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if jsonText.hasPrefix("```") {
+            if let nl = jsonText.firstIndex(of: "\n") { jsonText = String(jsonText[jsonText.index(after: nl)...]) }
+            if jsonText.hasSuffix("```") { jsonText = String(jsonText.dropLast(3)).trimmingCharacters(in: .whitespacesAndNewlines) }
+        }
+
+        guard let contentData = jsonText.data(using: .utf8),
               let parsed = try JSONSerialization.jsonObject(with: contentData) as? [String: Any],
               let rawItems = parsed["items"] as? [[String: Any]] else {
-            throw AnalysisError.parsingFailed("Could not parse OpenAI response")
+            print("OpenAI: failed to parse content as JSON: \(content.prefix(300))")
+            throw AnalysisError.parsingFailed("OpenAI response is not valid food JSON")
         }
 
         // Convert to AnalysisItems with local nutrition lookup
@@ -93,10 +113,16 @@ final class OpenAIAnalysisProvider: FoodAnalysisProvider {
             let confidence = (raw["confidence"] as? Double) ?? 0.7
             let portionLabel = (raw["portion_label"] as? String) ?? "medium"
 
-            // Resolve alias and look up nutrition from local DB
+            // AI-provided macro estimates (fallback when not in local DB)
+            let aiCal = (raw["calories"] as? Double) ?? 0
+            let aiPro = (raw["protein_g"] as? Double) ?? 0
+            let aiCarb = (raw["carbs_g"] as? Double) ?? 0
+            let aiFat = (raw["fat_g"] as? Double) ?? 0
+
             let resolved = NutritionDB.shared.resolveAlias(canonical.lowercased())
             let nutrition = NutritionDB.shared.lookup(canonicalName: resolved, grams: grams)
 
+            // DB values are authoritative; AI estimates are fallback
             return AnalysisItem(
                 detectedName: detected,
                 canonicalName: resolved,
@@ -104,13 +130,13 @@ final class OpenAIAnalysisProvider: FoodAnalysisProvider {
                 estimatedGrams: grams,
                 uncertainty: "AI estimate",
                 confidence: confidence,
-                calories: nutrition?.calories ?? 0,
-                proteinG: nutrition?.proteinG ?? 0,
-                carbsG: nutrition?.carbsG ?? 0,
-                fatG: nutrition?.fatG ?? 0,
+                calories: nutrition?.calories ?? aiCal,
+                proteinG: nutrition?.proteinG ?? aiPro,
+                carbsG: nutrition?.carbsG ?? aiCarb,
+                fatG: nutrition?.fatG ?? aiFat,
                 visionConfidence: confidence,
                 dbMatch: nutrition != nil,
-                nutritionAvailable: nutrition != nil
+                nutritionAvailable: (nutrition != nil) || (aiCal > 0)
             )
         }
 

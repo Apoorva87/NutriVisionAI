@@ -51,7 +51,7 @@ struct MealSuggestionsView: View {
                     Image(systemName: "text.bubble")
                         .foregroundStyle(Theme.textMuted)
                         .font(.caption)
-                    TextField("e.g. indian, pasta...", text: $cravingInput)
+                    TextField("Indian Vegetarian", text: $cravingInput)
                         .font(.caption)
                         .foregroundStyle(Theme.textPrimary)
                         .onSubmit { Task { await loadSuggestions() } }
@@ -132,7 +132,8 @@ struct MealSuggestionsView: View {
         .themedCard()
         .task {
             calorieBudget = Int(summary.remainingCalories)
-            if calorieBudget >= 50 && !remainingSlots.isEmpty {
+            // Only auto-load on first appear (app launch); skip if already populated
+            if suggestions.isEmpty && calorieBudget >= 50 && !remainingSlots.isEmpty {
                 await loadSuggestions()
             }
         }
@@ -142,11 +143,10 @@ struct MealSuggestionsView: View {
         isLoading = true
         errorMessage = nil
 
-        let model = settings?.modelProvider ?? "default"
         let recentList = recentMeals.map { $0.mealName }.joined(separator: ", ")
         let slotsStr = remainingSlots.map { $0.name }.joined(separator: ", ")
         let budgetBreakdown = remainingSlots.map { "\($0.name): \(Int(Double(calorieBudget) * $0.calorieShare)) cal" }.joined(separator: ", ")
-        let preference = cravingInput.isEmpty ? "healthy balanced meals" : cravingInput
+        let preference = cravingInput.isEmpty ? "Indian Vegetarian" : cravingInput
 
         let prompt = """
         You are a nutrition assistant. The user has \(calorieBudget) calories remaining today.
@@ -162,13 +162,11 @@ struct MealSuggestionsView: View {
         Do not repeat foods from recently eaten list.
         """
 
-        let messages = [
-            LLMMessage(role: "system", content: prompt),
-            LLMMessage(role: "user", content: "Generate meal suggestions now."),
-        ]
-
         do {
-            let content = try await APIClient.shared.llmChat(model: model, messages: messages)
+            let content = try await FoodAnalysisService.shared.chatCompletion(
+                prompt: prompt,
+                userMessage: "Generate meal suggestions now."
+            )
             // Parse JSON array from content
             if let jsonStart = content.firstIndex(of: "["),
                let jsonEnd = content.lastIndex(of: "]") {

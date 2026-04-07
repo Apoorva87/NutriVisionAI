@@ -5,13 +5,14 @@ SwiftUI app targeting **iOS 17+**. Supports two operating modes: cloud mode (cal
 ## What This App Does
 
 NutriVisionAI is a nutrition tracking app. Users can:
-1. **Scan food photos** — camera captures a meal, AI detects food items and estimates nutrition
-2. **Quick log meals** — search a nutrition database, build a meal from items, save it
-3. **View dashboard** — today's calorie/macro summary, recent meals
+1. **Scan food photos** — camera captures a meal, AI detects food items with macros (DB-first, AI-fallback), editable portions/macros via slider + gram input
+2. **Quick log meals** — search local nutrition DB (multi-token fuzzy search with abbreviations), build a meal from items, save it
+3. **View dashboard** — today's calorie/macro summary, recent meals, grocery list card
 4. **Browse history** — 14-day trends, meals grouped by day, top foods
-5. **Manage settings** — calorie/macro goals, AI provider config
-6. **Custom foods** — create user-specific food entries, log them as meals
-7. **AI food lookup** — ask the LLM to estimate nutrition for unknown foods
+5. **Manage settings** — calorie/macro goals, AI provider config (Gemini/OpenAI/OpenRouter/LMStudio), timezone region picker
+6. **Custom foods** — create from scan results ("Save as Custom Food") or AI lookup, stored in local SQLite
+7. **AI food lookup** — LLM estimates nutrition for unknown/composite foods (works in both cloud and server mode)
+8. **Grocery list** — AI-generated suggestions based on meal history + manual cart, cached across navigation
 
 ## Operating Modes
 
@@ -26,11 +27,14 @@ The app has two operating modes:
 
 | File | Purpose |
 |------|---------|
-| `Services/NutritionDB.swift` | Bundled SQLite nutrition database (search, lookup, alias resolution) |
-| `Services/LocalMealStore.swift` | Local meal persistence for cloud mode |
+| `Services/NutritionDB.swift` | Bundled SQLite nutrition database (7,850 foods). Multi-token AND search with abbreviation expansion. |
+| `Services/LocalMealStore.swift` | Local meal persistence + custom_foods table for cloud mode |
 | `Services/OpenAIAnalysisProvider.swift` | Direct OpenAI vision API calls from iOS |
-| `Services/GeminiAnalysisProvider.swift` | Direct Gemini vision API calls from iOS |
-| `Services/FoodAnalysisService.swift` | Central routing — picks provider, exposes `isCloudMode` |
+| `Services/GeminiAnalysisProvider.swift` | Direct Gemini vision API calls from iOS. Uses `thinkingBudget: 0` for speed, `responseMimeType: "application/json"` for structured output. |
+| `Services/OpenRouterAnalysisProvider.swift` | OpenRouter multi-model routing provider |
+| `Services/FoodAnalysisService.swift` | Central routing — picks provider, exposes `isCloudMode`. Also provides `chatCompletion()` for text-only LLM calls. |
+| `Services/NetworkLogger.swift` | SQLite-based network request logger (viewable in Settings) |
+| `Services/GroceryCartStore.swift` | SQLite-based grocery cart persistence |
 
 ## Project Structure
 
@@ -40,10 +44,29 @@ ios/NutriVisionAI/
 ├── Models/
 │   └── NutritionModels.swift       # All Codable structs (API contract)
 ├── Services/
-│   └── APIClient.swift             # Singleton HTTP client (Bearer token auth)
+│   ├── APIClient.swift             # Singleton HTTP client (Bearer token auth, 15s timeout)
+│   ├── FoodAnalysisService.swift   # Provider routing + isCloudMode flag
+│   ├── GeminiAnalysisProvider.swift
+│   ├── OpenAIAnalysisProvider.swift
+│   ├── OpenRouterAnalysisProvider.swift
+│   ├── NutritionDB.swift           # Local SQLite nutrition DB (7,850 foods)
+│   ├── LocalMealStore.swift        # Local meal + custom_foods persistence
+│   ├── GroceryCartStore.swift      # Grocery cart persistence
+│   └── NetworkLogger.swift         # Request/response logging
 ├── Views/
-│   └── ContentView.swift           # Tab-based navigation (placeholder views)
-├── Supporting/                     # (empty — for assets, Info.plist, etc.)
+│   ├── ContentView.swift           # Tab-based navigation
+│   ├── DashboardView.swift         # Home tab — summary, recent meals, grocery card
+│   ├── AnalyzeView.swift           # Scan tab — camera → AI analysis → editable items → save
+│   ├── LogView.swift               # Log tab — DB search, meal builder, AI food lookup
+│   ├── HistoryView.swift           # History tab — 14-day trends, grouped meals
+│   ├── SettingsView.swift          # Settings tab — goals, provider config, timezone
+│   ├── GroceryListView.swift       # AI-generated grocery suggestions + cart
+│   ├── QuickFoodSearchSheet.swift  # DB search sheet (used in Scan + Log)
+│   └── Components/
+│       └── PortionSelector.swift   # Preset buttons + slider + gram input
+├── Data/
+│   └── nutrition.db                # Bundled SQLite nutrition database
+├── Supporting/
 ├── project.yml                     # XcodeGen spec (run `xcodegen generate`)
 └── Package.swift                   # SPM reference (alternative to xcodeproj)
 ```
@@ -301,6 +324,56 @@ All Swift models are in `Models/NutritionModels.swift`. They map to Python Pydan
 | `APIError` | (inline) | All error responses |
 
 **Convention**: Python uses `snake_case`, Swift uses `camelCase`. Every Swift struct has `CodingKeys` that map between them. When adding new fields, always add the `CodingKey` mapping.
+
+## Key Architecture Patterns
+
+### DB-First, AI-Fallback for Nutrition
+All 3 vision providers (Gemini, OpenAI, OpenRouter) request macros in the AI prompt. Post-processing:
+1. Look up `canonical_name` in local NutritionDB (authoritative)
+2. If DB hit → use DB values. If miss → use AI-estimated values.
+3. `AnalysisItem.dbMatch` indicates which source was used; `nutritionAvailable` is true if either source provided data.
+
+### Cloud Mode Routing
+Many features have dual paths. Pattern:
+```swift
+if FoodAnalysisService.shared.isCloudMode {
+    // Use local DB, LocalMealStore, or chatCompletion()
+} else {
+    // Use APIClient (backend)
+}
+```
+Applied in: QuickFoodSearchSheet.search(), LogView.lookupFood(), LogView.loadCustomFoods(), saveMeal(), dashboard loading.
+
+### Static Cache for Navigation Survival
+SwiftUI @State is destroyed when NavigationLink pops. For data that should survive navigation:
+```swift
+private static var cachedData: [MyType] = []
+@State private var data: [MyType] = MyView.cachedData
+// After fetching: Self.cachedData = data
+```
+Used in: GroceryListView (AI suggestions).
+
+### Editable Analysis Items
+`EditableAnalysisItem` wraps `AnalysisItem` with optional override fields (overrideGrams, overrideCalories, etc.). Computed `effective*` properties return override ?? (base * multiplier). All totals and saveMeal() use effective values.
+
+### Singleton Services with Thread-Safe SQLite
+Each SQLite service (LocalMealStore, NutritionDB, GroceryCartStore, NetworkLogger) uses its own .db file and a dedicated `DispatchQueue` for thread safety. All are singletons via `static let shared`.
+
+### APIClient Timeouts
+Normal requests: 15s. Multipart uploads: 30s. Prevents 60s hangs when cloud mode accidentally triggers backend calls.
+
+### Text LLM Calls (Non-Vision)
+`FoodAnalysisService.shared.chatCompletion(prompt:userMessage:)` routes text-only LLM calls through the active cloud provider. Used for AI food lookup, grocery suggestions, etc.
+
+## Building & Running
+
+```bash
+cd ios/NutriVisionAI
+xcodegen generate          # Regenerate .xcodeproj after adding/removing Swift files
+xcodebuild -project NutriVisionAI.xcodeproj -scheme NutriVisionAI -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+```
+
+Available simulator: **iPhone 17 Pro** (not iPhone 16).
 
 ## Key Design Decisions for the iOS Agent
 

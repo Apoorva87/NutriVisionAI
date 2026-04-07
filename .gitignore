@@ -22,3 +22,4 @@ app.db-shm
 app.db-wal
 ios/*/.build/
 ios/*/.swiftpm/
+.keys

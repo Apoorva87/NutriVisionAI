@@ -31,13 +31,14 @@ final class GeminiAnalysisProvider: FoodAnalysisProvider {
         Analyze this food photo for nutrition logging. For each food item visible:
         1. Identify the food (detected_name: what you see, canonical_name: standard database name)
         2. Estimate portion in grams
-        3. Rate your confidence (0.0-1.0)
+        3. Estimate nutrition for that portion: calories, protein_g, carbs_g, fat_g
+        4. Rate your confidence (0.0-1.0)
 
-        For multi-dish plates, identify each component separately (rice, curry, bread, etc).
-        Prefer 4-10 items when multiple dishes are visible.
-        Use short canonical names that map to a nutrition database.
+        For composite/mixed dishes (biryani, pad thai, chia seed pudding), return ONE item for the whole dish with total nutrition.
+        For clearly separate items on a plate (rice + curry + bread), return each component separately.
+        Prefer 3-8 items. Use short canonical names that map to a nutrition database.
 
-        Return strict JSON: {"items": [{"detected_name": "...", "canonical_name": "...", "portion_label": "small|medium|large", "estimated_grams": 150.0, "confidence": 0.85}]}
+        Return strict JSON: {"items": [{"detected_name": "...", "canonical_name": "...", "portion_label": "small|medium|large", "estimated_grams": 150.0, "confidence": 0.85, "calories": 250.0, "protein_g": 10.0, "carbs_g": 30.0, "fat_g": 8.0}]}
         """
 
         let requestBody: [String: Any] = [
@@ -67,19 +68,32 @@ final class GeminiAnalysisProvider: FoodAnalysisProvider {
         request.timeoutInterval = 30
 
         print("Gemini: requesting \(model) at \(urlString.prefix(80))...")
+        let start = CFAbsoluteTimeGetCurrent()
         let (data, response) = try await URLSession.shared.data(for: request)
+        let durationMs = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
 
         guard let httpResponse = response as? HTTPURLResponse else {
+            NetworkLogger.shared.log(provider: "gemini", action: "analyze_image", durationMs: durationMs, status: "error", errorMessage: "Invalid response")
             throw AnalysisError.networkError("Invalid response")
         }
-        print("Gemini: HTTP \(httpResponse.statusCode), response \(data.count) bytes")
+        let httpOk = (200...299).contains(httpResponse.statusCode)
+        NetworkLogger.shared.log(provider: "gemini", action: "analyze_image", durationMs: durationMs,
+                                  status: httpOk ? "ok" : "error",
+                                  errorMessage: httpOk ? nil : "HTTP \(httpResponse.statusCode)",
+                                  responseSizeBytes: data.count)
+        print("Gemini: HTTP \(httpResponse.statusCode), response \(data.count) bytes, \(durationMs)ms")
         if httpResponse.statusCode == 429 {
             let errorBody = String(data: data, encoding: .utf8) ?? "no body"
             print("Gemini 429 response: \(errorBody)")
             throw AnalysisError.providerUnavailable("Gemini rate limit reached. Details: \(errorBody)")
         }
         if httpResponse.statusCode == 400 || httpResponse.statusCode == 403 {
-            throw AnalysisError.providerUnavailable("Invalid Google API key. Check Settings.")
+            let errorBody = String(data: data, encoding: .utf8) ?? "no body"
+            print("Gemini \(httpResponse.statusCode) response: \(errorBody)")
+            if errorBody.contains("API_KEY_INVALID") || errorBody.contains("PERMISSION_DENIED") {
+                throw AnalysisError.providerUnavailable("Invalid Google API key. Check Settings.")
+            }
+            throw AnalysisError.providerUnavailable("Gemini error (\(httpResponse.statusCode)): \(errorBody.prefix(200))")
         }
         guard (200...299).contains(httpResponse.statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? ""
@@ -87,15 +101,39 @@ final class GeminiAnalysisProvider: FoodAnalysisProvider {
         }
 
         // Parse Gemini response
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let candidates = json["candidates"] as? [[String: Any]],
-              let content = candidates.first?["content"] as? [String: Any],
-              let parts = content["parts"] as? [[String: Any]],
-              let text = parts.first?["text"] as? String,
-              let textData = text.data(using: .utf8),
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw AnalysisError.parsingFailed("Gemini response is not valid JSON")
+        }
+        guard let candidates = json["candidates"] as? [[String: Any]], !candidates.isEmpty else {
+            // Check for prompt feedback (safety block)
+            let feedback = json["promptFeedback"] as? [String: Any]
+            let reason = (feedback?["blockReason"] as? String) ?? "unknown"
+            throw AnalysisError.parsingFailed("Gemini returned no candidates (reason: \(reason))")
+        }
+        guard let content = candidates.first?["content"] as? [String: Any],
+              let parts = content["parts"] as? [[String: Any]], !parts.isEmpty else {
+            let finishReason = candidates.first?["finishReason"] as? String ?? "unknown"
+            throw AnalysisError.parsingFailed("Gemini returned empty content (finishReason: \(finishReason))")
+        }
+
+        // Skip thinking parts (gemini-2.5-* models return {thought: true, text: "..."} before the real answer)
+        let contentParts = parts.filter { ($0["thought"] as? Bool) != true }
+        guard let text = contentParts.last?["text"] as? String, !text.isEmpty else {
+            throw AnalysisError.parsingFailed("Gemini returned no text content")
+        }
+
+        // Strip markdown fences if present (some models wrap JSON in ```json ... ```)
+        var jsonText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if jsonText.hasPrefix("```") {
+            if let nl = jsonText.firstIndex(of: "\n") { jsonText = String(jsonText[jsonText.index(after: nl)...]) }
+            if jsonText.hasSuffix("```") { jsonText = String(jsonText.dropLast(3)).trimmingCharacters(in: .whitespacesAndNewlines) }
+        }
+
+        guard let textData = jsonText.data(using: .utf8),
               let parsed = try JSONSerialization.jsonObject(with: textData) as? [String: Any],
               let rawItems = parsed["items"] as? [[String: Any]] else {
-            throw AnalysisError.parsingFailed("Could not parse Gemini response")
+            print("Gemini: failed to parse text as JSON: \(text.prefix(300))")
+            throw AnalysisError.parsingFailed("Gemini response text is not valid food JSON")
         }
 
         // Convert to AnalysisItems — same logic as OpenAI provider
@@ -107,9 +145,16 @@ final class GeminiAnalysisProvider: FoodAnalysisProvider {
             let confidence = (raw["confidence"] as? Double) ?? 0.7
             let portionLabel = (raw["portion_label"] as? String) ?? "medium"
 
+            // AI-provided macro estimates (fallback when not in local DB)
+            let aiCal = (raw["calories"] as? Double) ?? 0
+            let aiPro = (raw["protein_g"] as? Double) ?? 0
+            let aiCarb = (raw["carbs_g"] as? Double) ?? 0
+            let aiFat = (raw["fat_g"] as? Double) ?? 0
+
             let resolved = NutritionDB.shared.resolveAlias(canonical.lowercased())
             let nutrition = NutritionDB.shared.lookup(canonicalName: resolved, grams: grams)
 
+            // DB values are authoritative; AI estimates are fallback
             return AnalysisItem(
                 detectedName: detected,
                 canonicalName: resolved,
@@ -117,13 +162,13 @@ final class GeminiAnalysisProvider: FoodAnalysisProvider {
                 estimatedGrams: grams,
                 uncertainty: "AI estimate",
                 confidence: confidence,
-                calories: nutrition?.calories ?? 0,
-                proteinG: nutrition?.proteinG ?? 0,
-                carbsG: nutrition?.carbsG ?? 0,
-                fatG: nutrition?.fatG ?? 0,
+                calories: nutrition?.calories ?? aiCal,
+                proteinG: nutrition?.proteinG ?? aiPro,
+                carbsG: nutrition?.carbsG ?? aiCarb,
+                fatG: nutrition?.fatG ?? aiFat,
                 visionConfidence: confidence,
                 dbMatch: nutrition != nil,
-                nutritionAvailable: nutrition != nil
+                nutritionAvailable: (nutrition != nil) || (aiCal > 0)
             )
         }
 

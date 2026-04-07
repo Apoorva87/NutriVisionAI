@@ -2,7 +2,7 @@ import SwiftUI
 import PhotosUI
 
 struct AnalyzeView: View {
-    @StateObject private var analysisService = FoodAnalysisService.shared
+    @ObservedObject private var analysisService = FoodAnalysisService.shared
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var capturedImage: UIImage?
     @State private var analysisResult: AnalysisResponse?
@@ -17,19 +17,19 @@ struct AnalyzeView: View {
     @State private var showQuickSearch = false
     
     private var totalCalories: Double {
-        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.calories * $1.gramsMultiplier }
+        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.effectiveCalories }
     }
 
     private var totalProtein: Double {
-        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.proteinG * $1.gramsMultiplier }
+        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.effectiveProtein }
     }
 
     private var totalCarbs: Double {
-        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.carbsG * $1.gramsMultiplier }
+        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.effectiveCarbs }
     }
 
     private var totalFat: Double {
-        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.item.fatG * $1.gramsMultiplier }
+        editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.effectiveFat }
     }
     
     var body: some View {
@@ -150,10 +150,10 @@ struct AnalyzeView: View {
                     estimatedGrams: editable.adjustedGrams,
                     uncertainty: editable.item.uncertainty,
                     confidence: editable.item.confidence,
-                    calories: editable.item.calories * editable.gramsMultiplier,
-                    proteinG: editable.item.proteinG * editable.gramsMultiplier,
-                    carbsG: editable.item.carbsG * editable.gramsMultiplier,
-                    fatG: editable.item.fatG * editable.gramsMultiplier,
+                    calories: editable.effectiveCalories,
+                    proteinG: editable.effectiveProtein,
+                    carbsG: editable.effectiveCarbs,
+                    fatG: editable.effectiveFat,
                     visionConfidence: editable.item.visionConfidence,
                     dbMatch: editable.item.dbMatch,
                     nutritionAvailable: editable.item.nutritionAvailable
@@ -223,10 +223,17 @@ struct EditableAnalysisItem: Identifiable {
     let item: AnalysisItem
     var isIncluded: Bool = true
     var gramsMultiplier: Double = 1.0
-    
-    var adjustedGrams: Double {
-        item.estimatedGrams * gramsMultiplier
-    }
+    var overrideGrams: Double?
+    var overrideCalories: Double?
+    var overrideProtein: Double?
+    var overrideCarbs: Double?
+    var overrideFat: Double?
+
+    var adjustedGrams: Double { overrideGrams ?? (item.estimatedGrams * gramsMultiplier) }
+    var effectiveCalories: Double { overrideCalories ?? (item.calories * gramsMultiplier) }
+    var effectiveProtein: Double { overrideProtein ?? (item.proteinG * gramsMultiplier) }
+    var effectiveCarbs: Double { overrideCarbs ?? (item.carbsG * gramsMultiplier) }
+    var effectiveFat: Double { overrideFat ?? (item.fatG * gramsMultiplier) }
 }
 
 // MARK: - Image Capture View
@@ -517,6 +524,8 @@ struct NutritionBannerItem: View {
 
 struct AnalysisItemRow: View {
     @Binding var item: EditableAnalysisItem
+    @State private var isEditingMacros = false
+    @State private var showSavedConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -541,8 +550,13 @@ struct AnalysisItemRow: View {
                     HStack(spacing: 8) {
                         Text("\(Int(item.adjustedGrams))g")
                             .foregroundStyle(Theme.textMuted)
-                        Text("\(Int(item.item.calories * item.gramsMultiplier)) cal")
+                        Text("\(Int(item.effectiveCalories)) cal")
                             .foregroundStyle(Theme.calorieValue)
+                        if !item.item.dbMatch && item.item.nutritionAvailable {
+                            Text("AI est.")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        }
                     }
                     .font(.caption)
                 }
@@ -555,17 +569,83 @@ struct AnalysisItemRow: View {
             if item.isIncluded {
                 PortionSelector(
                     baseGrams: item.item.estimatedGrams,
-                    selectedMultiplier: $item.gramsMultiplier
+                    selectedMultiplier: $item.gramsMultiplier,
+                    overrideGrams: $item.overrideGrams
                 )
                 .padding(.horizontal)
                 .padding(.bottom, 8)
+
+                // Macro summary row (always visible)
+                HStack(spacing: 12) {
+                    MacroChip(label: "P", value: Int(item.effectiveProtein), color: Theme.proteinColor)
+                    MacroChip(label: "C", value: Int(item.effectiveCarbs), color: Theme.carbsColor)
+                    MacroChip(label: "F", value: Int(item.effectiveFat), color: Theme.fatColor)
+
+                    Spacer()
+
+                    Button {
+                        withAnimation { isEditingMacros.toggle() }
+                    } label: {
+                        Label(isEditingMacros ? "Done" : "Edit",
+                              systemImage: isEditingMacros ? "checkmark.circle" : "pencil.circle")
+                            .font(.caption2)
+                            .foregroundStyle(Theme.accent)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+
+                // Expandable macro editor
+                if isEditingMacros {
+                    VStack(spacing: 8) {
+                        MacroEditorRow(
+                            calories: Binding(
+                                get: { item.overrideCalories ?? item.effectiveCalories },
+                                set: { item.overrideCalories = $0 }
+                            ),
+                            protein: Binding(
+                                get: { item.overrideProtein ?? item.effectiveProtein },
+                                set: { item.overrideProtein = $0 }
+                            ),
+                            carbs: Binding(
+                                get: { item.overrideCarbs ?? item.effectiveCarbs },
+                                set: { item.overrideCarbs = $0 }
+                            ),
+                            fat: Binding(
+                                get: { item.overrideFat ?? item.effectiveFat },
+                                set: { item.overrideFat = $0 }
+                            )
+                        )
+
+                        Button {
+                            LocalMealStore.shared.saveCustomFood(
+                                name: item.item.canonicalName,
+                                servingGrams: item.adjustedGrams,
+                                calories: item.effectiveCalories,
+                                proteinG: item.effectiveProtein,
+                                carbsG: item.effectiveCarbs,
+                                fatG: item.effectiveFat
+                            )
+                            showSavedConfirmation = true
+                        } label: {
+                            Label("Save as Custom Food", systemImage: "square.and.arrow.down")
+                                .font(.caption2)
+                                .foregroundStyle(Theme.accent)
+                        }
+                        .padding(.bottom, 4)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
 
             // Confidence indicator
             if item.isIncluded {
                 HStack(spacing: 8) {
                     if !item.item.dbMatch {
-                        Label("Not in database", systemImage: "exclamationmark.triangle.fill")
+                        Label(item.item.nutritionAvailable ? "AI-estimated nutrition" : "Not in database",
+                              systemImage: "exclamationmark.triangle.fill")
                             .font(.caption2)
                             .foregroundStyle(.orange)
                     }
@@ -585,6 +665,84 @@ struct AnalysisItemRow: View {
         }
         .themedCard()
         .padding(.horizontal)
+        .overlay {
+            if showSavedConfirmation {
+                Text("Saved!")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Theme.successStart)
+                    .clipShape(Capsule())
+                    .transition(.opacity)
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation { showSavedConfirmation = false }
+                        }
+                    }
+            }
+        }
+    }
+}
+
+// MARK: - Macro Editor Components
+
+private struct MacroChip: View {
+    let label: String
+    let value: Int
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Text(label)
+                .fontWeight(.bold)
+                .foregroundStyle(color)
+            Text("\(value)g")
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .font(.caption2)
+    }
+}
+
+private struct MacroEditorRow: View {
+    @Binding var calories: Double
+    @Binding var protein: Double
+    @Binding var carbs: Double
+    @Binding var fat: Double
+
+    var body: some View {
+        HStack(spacing: 8) {
+            MacroField(label: "Cal", value: $calories, color: Theme.calorieValue)
+            MacroField(label: "P", value: $protein, color: Theme.proteinColor)
+            MacroField(label: "C", value: $carbs, color: Theme.carbsColor)
+            MacroField(label: "F", value: $fat, color: Theme.fatColor)
+        }
+    }
+}
+
+private struct MacroField: View {
+    let label: String
+    @Binding var value: Double
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(label)
+                .font(.caption2)
+                .fontWeight(.bold)
+                .foregroundStyle(color)
+            TextField("0", value: $value, format: .number)
+                .keyboardType(.decimalPad)
+                .multilineTextAlignment(.center)
+                .font(.caption)
+                .foregroundStyle(Theme.textPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(4)
+                .background(Color.white.opacity(0.04))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(color.opacity(0.3)))
+        }
     }
 }
 

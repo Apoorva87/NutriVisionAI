@@ -52,19 +52,64 @@ final class NutritionDB {
 
     // MARK: - Search
 
+    /// Common food abbreviations for fuzzy-ish matching
+    private static let abbreviations: [String: String] = [
+        "chkn": "chicken", "chk": "chicken", "brst": "breast",
+        "veg": "vegetable", "vegs": "vegetables",
+        "tmt": "tomato", "bnls": "boneless", "grn": "green",
+        "brn": "brown", "wht": "white", "org": "organic",
+        "fsh": "fish", "pnr": "paneer", "pneer": "paneer",
+        "dal": "dal", "daal": "dal", "dhal": "dal",
+        "chpti": "chapati", "roti": "roti", "curd": "yogurt",
+        "broc": "broccoli", "tom": "tomato", "pot": "potato",
+        "mush": "mushroom", "spin": "spinach", "cauli": "cauliflower",
+    ]
+
     func search(query: String, limit: Int = 15) -> [FoodItem] {
         guard let db = db else { return [] }
         var results: [FoodItem] = []
 
+        // Tokenize and expand abbreviations
+        let tokens = query.lowercased()
+            .split(separator: " ")
+            .map { String($0) }
+            .filter { !$0.isEmpty }
+            .map { Self.abbreviations[$0] ?? $0 }
+
+        guard !tokens.isEmpty else { return [] }
+
         queue.sync {
-            let sql = "SELECT canonical_name, serving_grams, calories, protein_g, carbs_g, fat_g, source_label FROM nutrition_items WHERE canonical_name LIKE ? ORDER BY canonical_name LIMIT ?"
+            // Each token must appear somewhere in the name (AND matching)
+            let conditions = tokens.map { _ in "canonical_name LIKE ?" }.joined(separator: " AND ")
+            let sql = """
+                SELECT canonical_name, serving_grams, calories, protein_g, carbs_g, fat_g, source_label
+                FROM nutrition_items
+                WHERE \(conditions)
+                ORDER BY
+                    CASE WHEN canonical_name LIKE ? THEN 0 ELSE 1 END,
+                    length(canonical_name),
+                    canonical_name
+                LIMIT ?
+                """
+
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
 
-            let pattern = "%\(query)%"
-            sqlite3_bind_text(stmt, 1, (pattern as NSString).utf8String, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self))
-            sqlite3_bind_int(stmt, 2, Int32(limit))
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+
+            // Bind each token as %token%
+            for (i, token) in tokens.enumerated() {
+                let pattern = "%\(token)%"
+                sqlite3_bind_text(stmt, Int32(i + 1), (pattern as NSString).utf8String, -1, transient)
+            }
+
+            // Bind prefix pattern for ranking (exact prefix match first)
+            let prefixPattern = "\(tokens.joined(separator: " "))%"
+            sqlite3_bind_text(stmt, Int32(tokens.count + 1), (prefixPattern as NSString).utf8String, -1, transient)
+
+            // Bind limit
+            sqlite3_bind_int(stmt, Int32(tokens.count + 2), Int32(limit))
 
             while sqlite3_step(stmt) == SQLITE_ROW {
                 let name = String(cString: sqlite3_column_text(stmt, 0))

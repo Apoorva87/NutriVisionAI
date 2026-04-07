@@ -5,6 +5,7 @@ import Foundation
 import SQLite3
 import UIKit
 
+
 final class LocalMealStore {
     static let shared = LocalMealStore()
 
@@ -52,6 +53,16 @@ final class LocalMealStore {
             carbs_g REAL,
             fat_g REAL,
             confidence REAL
+        );
+        CREATE TABLE IF NOT EXISTS custom_foods (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            food_name TEXT NOT NULL UNIQUE,
+            serving_grams REAL NOT NULL,
+            calories REAL NOT NULL,
+            protein_g REAL NOT NULL,
+            carbs_g REAL NOT NULL,
+            fat_g REAL NOT NULL,
+            created_at TEXT NOT NULL
         );
         """
         sqlite3_exec(db, sql, nil, nil, nil)
@@ -310,6 +321,69 @@ final class LocalMealStore {
         }
 
         return HistoryResponse(trends: trends, groupedMeals: groupedMeals, topFoods: topFoods)
+    }
+
+    // MARK: - Custom Foods
+
+    @discardableResult
+    func saveCustomFood(name: String, servingGrams: Double, calories: Double,
+                        proteinG: Double, carbsG: Double, fatG: Double) -> Int {
+        guard let db = db else { return -1 }
+        var foodId = -1
+        queue.sync {
+            let now = ISO8601DateFormatter().string(from: Date())
+            let sql = "INSERT OR REPLACE INTO custom_foods (food_name, serving_grams, calories, protein_g, carbs_g, fat_g, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+            let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+            sqlite3_bind_text(stmt, 1, (name as NSString).utf8String, -1, transient)
+            sqlite3_bind_double(stmt, 2, servingGrams)
+            sqlite3_bind_double(stmt, 3, calories)
+            sqlite3_bind_double(stmt, 4, proteinG)
+            sqlite3_bind_double(stmt, 5, carbsG)
+            sqlite3_bind_double(stmt, 6, fatG)
+            sqlite3_bind_text(stmt, 7, (now as NSString).utf8String, -1, transient)
+            if sqlite3_step(stmt) == SQLITE_DONE {
+                foodId = Int(sqlite3_last_insert_rowid(db))
+            }
+        }
+        return foodId
+    }
+
+    func allCustomFoods() -> [CustomFood] {
+        guard let db = db else { return [] }
+        var foods: [CustomFood] = []
+        queue.sync {
+            let sql = "SELECT id, food_name, serving_grams, calories, protein_g, carbs_g, fat_g FROM custom_foods ORDER BY food_name"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                foods.append(CustomFood(
+                    id: Int(sqlite3_column_int(stmt, 0)),
+                    foodName: String(cString: sqlite3_column_text(stmt, 1)),
+                    servingGrams: sqlite3_column_double(stmt, 2),
+                    calories: sqlite3_column_double(stmt, 3),
+                    proteinG: sqlite3_column_double(stmt, 4),
+                    carbsG: sqlite3_column_double(stmt, 5),
+                    fatG: sqlite3_column_double(stmt, 6)
+                ))
+            }
+        }
+        return foods
+    }
+
+    func deleteCustomFood(id: Int) {
+        guard let db = db else { return }
+        queue.sync {
+            let sql = "DELETE FROM custom_foods WHERE id = ?"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_int(stmt, 1, Int32(id))
+            sqlite3_step(stmt)
+        }
     }
 }
 

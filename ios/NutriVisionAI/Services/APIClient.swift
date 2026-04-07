@@ -156,8 +156,9 @@ final class APIClient {
         let url = URL(string: "\(apiBase)\(path)")!
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.timeoutInterval = 15
         applyAuth(&request)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await timedData(for: request, action: path)
         try checkStatus(response, data: data)
         return try decoder.decode(T.self, from: data)
     }
@@ -166,10 +167,11 @@ final class APIClient {
         let url = URL(string: "\(apiBase)\(path)")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
         applyAuth(&request)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await timedData(for: request, action: path)
         try checkStatus(response, data: data)
         return try decoder.decode(T.self, from: data)
     }
@@ -178,8 +180,9 @@ final class APIClient {
         let url = URL(string: "\(apiBase)\(path)")!
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
+        request.timeoutInterval = 15
         applyAuth(&request)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await timedData(for: request, action: path)
         try checkStatus(response, data: data)
         return try decoder.decode(T.self, from: data)
     }
@@ -188,10 +191,11 @@ final class APIClient {
         let url = URL(string: "\(apiBase)\(path)")!
         var request = URLRequest(url: url)
         request.httpMethod = "PUT"
+        request.timeoutInterval = 15
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
         applyAuth(&request)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await timedData(for: request, action: path)
         try checkStatus(response, data: data)
         return try decoder.decode(T.self, from: data)
     }
@@ -201,6 +205,7 @@ final class APIClient {
         let boundary = UUID().uuidString
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 30
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         applyAuth(&request)
 
@@ -212,9 +217,27 @@ final class APIClient {
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await timedData(for: request, action: path)
         try checkStatus(response, data: data)
         return try decoder.decode(T.self, from: data)
+    }
+
+    private func timedData(for request: URLRequest, action: String) async throws -> (Data, URLResponse) {
+        let start = CFAbsoluteTimeGetCurrent()
+        do {
+            let (data, response) = try await session.data(for: request)
+            let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            NetworkLogger.shared.log(provider: "backend", action: action,
+                                      durationMs: ms, status: "ok",
+                                      responseSizeBytes: data.count)
+            return (data, response)
+        } catch {
+            let ms = Int((CFAbsoluteTimeGetCurrent() - start) * 1000)
+            NetworkLogger.shared.log(provider: "backend", action: action,
+                                      durationMs: ms, status: "error",
+                                      errorMessage: error.localizedDescription)
+            throw error
+        }
     }
 
     private func applyAuth(_ request: inout URLRequest) {

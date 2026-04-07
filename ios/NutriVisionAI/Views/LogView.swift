@@ -169,11 +169,15 @@ struct LogView: View {
 
     private func loadCustomFoods() async {
         isLoadingCustomFoods = true
-        do {
-            let response = try await APIClient.shared.customFoods()
-            customFoods = response["items"] ?? []
-        } catch {
-            customFoods = []
+        if FoodAnalysisService.shared.isCloudMode {
+            customFoods = LocalMealStore.shared.allCustomFoods()
+        } else {
+            do {
+                let response = try await APIClient.shared.customFoods()
+                customFoods = response["items"] ?? []
+            } catch {
+                customFoods = []
+            }
         }
         isLoadingCustomFoods = false
     }
@@ -771,18 +775,58 @@ struct AIFoodLookupSheet: View {
 
         Task {
             do {
-                let response = try await APIClient.shared.aiLookup(query: query)
+                let response: AIFoodResult
+                if FoodAnalysisService.shared.isCloudMode {
+                    response = try await cloudAILookup(query: query)
+                } else {
+                    response = try await APIClient.shared.aiLookup(query: query)
+                }
                 await MainActor.run {
                     result = response
                     isLoading = false
                 }
             } catch {
-                await MainActor.run {
-                    errorMessage = error.localizedDescription
-                    isLoading = false
+                if !(error is CancellationError) {
+                    await MainActor.run {
+                        errorMessage = error.localizedDescription
+                        isLoading = false
+                    }
                 }
             }
         }
+    }
+
+    private func cloudAILookup(query: String) async throws -> AIFoodResult {
+        let prompt = """
+        You are a nutrition expert. Estimate the nutrition for a typical serving of the given food.
+        For composite dishes (chia seed pudding, biryani, pad thai), estimate the complete dish.
+        For individual items (chicken breast, rice), estimate per standard serving.
+
+        Return ONLY JSON: {"food_name":"...","serving_grams":150.0,"calories":250.0,"protein_g":10.0,"carbs_g":30.0,"fat_g":8.0,"confidence":0.8,"notes":"brief note about estimate"}
+        """
+
+        let responseText = try await FoodAnalysisService.shared.chatCompletion(
+            prompt: prompt,
+            userMessage: query
+        )
+
+        // Parse JSON — handle markdown fences
+        var text = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("```") {
+            if let nl = text.firstIndex(of: "\n") { text = String(text[text.index(after: nl)...]) }
+            if text.hasSuffix("```") { text = String(text.dropLast(3)).trimmingCharacters(in: .whitespacesAndNewlines) }
+        }
+
+        guard let start = text.firstIndex(of: "{"),
+              let end = text.lastIndex(of: "}") else {
+            throw AnalysisError.parsingFailed("No JSON in AI response")
+        }
+        let jsonStr = String(text[start...end])
+        guard let data = jsonStr.data(using: .utf8) else {
+            throw AnalysisError.parsingFailed("Invalid JSON encoding")
+        }
+
+        return try JSONDecoder().decode(AIFoodResult.self, from: data)
     }
 }
 

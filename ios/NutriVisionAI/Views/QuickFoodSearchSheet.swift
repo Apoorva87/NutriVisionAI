@@ -16,6 +16,7 @@ struct QuickFoodSearchSheet: View {
                         .foregroundStyle(Theme.textMuted)
                     TextField("Search foods...", text: $query)
                         .foregroundStyle(Theme.textPrimary)
+                        .autocorrectionDisabled()
                         .submitLabel(.search)
                         .onSubmit { search() }
                     if !query.isEmpty {
@@ -73,23 +74,43 @@ struct QuickFoodSearchSheet: View {
                         .foregroundStyle(Theme.accent)
                 }
             }
+            .task(id: query) {
+                let trimmed = query.trimmingCharacters(in: .whitespaces)
+                guard !trimmed.isEmpty else {
+                    results = []
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                guard !Task.isCancelled else { return }
+                search()
+            }
         }
     }
 
     private func search() {
-        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-        isSearching = true
-        Task {
-            do {
-                let response = try await APIClient.shared.searchFoods(query: query)
-                await MainActor.run {
-                    results = response.items
-                    isSearching = false
-                }
-            } catch {
-                await MainActor.run {
-                    results = []
-                    isSearching = false
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else {
+            results = []
+            return
+        }
+
+        if FoodAnalysisService.shared.isCloudMode {
+            // Local DB search — instant, no network needed
+            results = NutritionDB.shared.search(query: trimmed)
+        } else {
+            isSearching = true
+            Task {
+                do {
+                    let response = try await APIClient.shared.searchFoods(query: trimmed)
+                    await MainActor.run {
+                        results = response.items
+                        isSearching = false
+                    }
+                } catch {
+                    await MainActor.run {
+                        results = []
+                        isSearching = false
+                    }
                 }
             }
         }

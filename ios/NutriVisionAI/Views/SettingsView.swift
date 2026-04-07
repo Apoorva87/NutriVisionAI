@@ -6,6 +6,14 @@ private struct ProviderSheet: Identifiable {
     let id: String  // "openai", "google", "anthropic"
 }
 
+private enum ModelTestStatus: Equatable {
+    case pending
+    case testing
+    case passed
+    case failed(String)
+    case rateLimited
+}
+
 // MARK: - Cloud Provider Sheet
 
 private struct CloudProviderSheet: View {
@@ -16,7 +24,7 @@ private struct CloudProviderSheet: View {
     @State private var selectedModel: String = ""
     @State private var baseURL: String = ""
     @State private var isTesting = false
-    @State private var testResult: String?
+    @State private var modelTestResults: [(model: String, status: ModelTestStatus)] = []
     @State private var isSaving = false
 
     private var providerTitle: String {
@@ -32,14 +40,27 @@ private struct CloudProviderSheet: View {
     private var models: [String] {
         switch provider {
         case "openai": return ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]
-        case "google": return ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+        case "google": return [
+            "gemini-3.1-pro-preview",
+            "gemini-3.1-flash-lite-preview",
+            "gemini-3-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-lite",
+        ]
         case "anthropic": return ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"]
         case "openrouter": return [
             "openrouter/free",
-            "qwen/qwen3-vl-235b-a22b-instruct",
+            "qwen/qwen3.6-plus:free",
+            "nvidia/nemotron-nano-12b-v2-vl:free",
+            "google/gemma-3-27b-it:free",
+            "google/gemma-3-4b-it:free",
+            "nvidia/nemotron-3-super-120b-a12b:free",
             "google/gemini-2.5-flash-preview",
             "openai/gpt-4o-mini",
-            "meta-llama/llama-4-maverick"
         ]
         default: return []
         }
@@ -137,6 +158,33 @@ private struct CloudProviderSheet: View {
                     }
                     .foregroundStyle(Theme.textPrimary)
                     .tint(Theme.textSecondary)
+
+                    if provider == "google" {
+                        let info = Self.geminiModelInfo(selectedModel)
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Image(systemName: "bolt.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.green)
+                                Text("Free tier")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(.green)
+                                Spacer()
+                                Text(info.tier)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(info.tierColor.opacity(0.15))
+                                    .foregroundStyle(info.tierColor)
+                                    .clipShape(Capsule())
+                            }
+                            Text(info.limits)
+                                .font(.caption2)
+                                .foregroundStyle(Theme.textMuted)
+                        }
+                        .listRowBackground(Theme.cardSurface)
+                    }
                 } header: {
                     Text("Model")
                         .foregroundStyle(Theme.textMuted)
@@ -167,10 +215,10 @@ private struct CloudProviderSheet: View {
                     .listRowBackground(Color.clear)
 
                     Button {
-                        testConnection()
+                        testAllModels()
                     } label: {
                         HStack {
-                            Text("Test Connection")
+                            Text("Test All Models")
                                 .foregroundStyle(Theme.textPrimary)
                             Spacer()
                             if isTesting {
@@ -181,13 +229,44 @@ private struct CloudProviderSheet: View {
                     .disabled(apiKey.isEmpty || isTesting || isComingSoon)
                     .listRowBackground(Theme.cardSurface)
 
-                    if let result = testResult {
-                        HStack {
-                            Image(systemName: result.contains("Success") ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundStyle(result.contains("Success") ? Theme.successStart : Theme.destructive)
-                            Text(result)
+                    ForEach(modelTestResults, id: \.model) { result in
+                        HStack(spacing: 8) {
+                            switch result.status {
+                            case .pending:
+                                Image(systemName: "circle")
+                                    .foregroundStyle(Theme.textMuted)
+                            case .testing:
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .tint(Theme.accent)
+                            case .passed:
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(Theme.successStart)
+                            case .failed:
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundStyle(Theme.destructive)
+                            case .rateLimited:
+                                Image(systemName: "clock.badge.exclamationmark")
+                                    .foregroundStyle(.orange)
+                            }
+                            Text(result.model)
                                 .font(.caption)
-                                .foregroundStyle(Theme.textSecondary)
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(1)
+                            Spacer()
+                            switch result.status {
+                            case .failed(let reason):
+                                Text(reason)
+                                    .font(.caption2)
+                                    .foregroundStyle(Theme.textMuted)
+                                    .lineLimit(1)
+                            case .rateLimited:
+                                Text("rate limited")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                            default:
+                                EmptyView()
+                            }
                         }
                         .listRowBackground(Theme.cardSurface)
                     }
@@ -214,8 +293,9 @@ private struct CloudProviderSheet: View {
 
     private func saveProviderConfig() {
         isSaving = true
-        if !apiKey.isEmpty {
-            try? KeychainHelper.save(key: "\(provider)_api_key", value: apiKey)
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedKey.isEmpty {
+            try? KeychainHelper.save(key: "\(provider)_api_key", value: trimmedKey)
         }
         UserDefaults.standard.set(selectedModel, forKey: "\(provider)_model")
         if !baseURL.isEmpty {
@@ -225,23 +305,115 @@ private struct CloudProviderSheet: View {
         dismiss()
     }
 
-    private func testConnection() {
+    private func testAllModels() {
         isTesting = true
-        testResult = nil
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else {
+            modelTestResults = [("No API key", .failed("enter a key first"))]
+            isTesting = false
+            return
+        }
+
+        // Initialize all models as pending
+        modelTestResults = models.map { ($0, ModelTestStatus.pending) }
 
         Task {
-            do {
-                _ = try await APIClient.shared.getSettings()
+            for (index, model) in models.enumerated() {
+                // Mark as testing
                 await MainActor.run {
-                    testResult = "Success \u{2014} Connected!"
-                    isTesting = false
+                    modelTestResults[index].status = .testing
                 }
-            } catch {
+
+                // Rate-limit: 500ms between requests to avoid 429s
+                if index > 0 {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                }
+
+                let status = await testSingleModel(provider: provider, apiKey: trimmedKey, model: model)
                 await MainActor.run {
-                    testResult = "Failed: \(error.localizedDescription)"
-                    isTesting = false
+                    modelTestResults[index].status = status
                 }
             }
+            await MainActor.run {
+                isTesting = false
+            }
+        }
+    }
+
+    private func testSingleModel(provider: String, apiKey: String, model: String) async -> ModelTestStatus {
+        do {
+            var request: URLRequest
+            switch provider {
+            case "google":
+                let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model)?key=\(apiKey)")!
+                request = URLRequest(url: url)
+            case "openai":
+                let url = URL(string: "https://api.openai.com/v1/models/\(model)")!
+                request = URLRequest(url: url)
+                request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            case "openrouter":
+                // For openrouter, test with a minimal chat completion
+                let base = UserDefaults.standard.string(forKey: "openrouter_base_url") ?? "https://openrouter.ai/api/v1"
+                let url = URL(string: "\(base)/chat/completions")!
+                request = URLRequest(url: url)
+                request.httpMethod = "POST"
+                request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                request.setValue("NutriVisionAI", forHTTPHeaderField: "X-Title")
+                request.httpBody = try? JSONSerialization.data(withJSONObject: [
+                    "model": model,
+                    "messages": [["role": "user", "content": "OK"]],
+                    "max_tokens": 1
+                ])
+                request.timeoutInterval = 15
+            default:
+                let url = URL(string: "\(APIClient.shared.baseURL)/api/v1/settings")!
+                request = URLRequest(url: url)
+            }
+            request.timeoutInterval = 10
+
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                return .failed("no response")
+            }
+            if (200...299).contains(http.statusCode) {
+                return .passed
+            } else if http.statusCode == 429 {
+                return .rateLimited
+            } else {
+                let body = String(data: data, encoding: .utf8) ?? ""
+                // Extract short reason
+                if body.contains("not found") || body.contains("NOT_FOUND") { return .failed("not found") }
+                if body.contains("PERMISSION_DENIED") || body.contains("API_KEY_INVALID") { return .failed("bad key") }
+                return .failed("HTTP \(http.statusCode)")
+            }
+        } catch {
+            return .failed("timeout")
+        }
+    }
+
+    private static func geminiModelInfo(_ model: String) -> (tier: String, tierColor: Color, limits: String) {
+        switch model {
+        case "gemini-3.1-pro-preview":
+            return ("Pro", .purple, "5 RPM · 25 RPD · 1M TPM — newest, most capable")
+        case "gemini-3.1-flash-lite-preview":
+            return ("Lite", .green, "30 RPM · 1,500 RPD · 1M TPM — fast & lightweight")
+        case "gemini-3-pro-preview":
+            return ("Pro", .purple, "5 RPM · 25 RPD · 1M TPM — strong vision & reasoning")
+        case "gemini-3-flash-preview":
+            return ("Flash", .cyan, "15 RPM · 500 RPD · 1M TPM — fast next-gen")
+        case "gemini-2.5-pro":
+            return ("Pro", .purple, "5 RPM · 25 RPD · 1M TPM — best 2.5 quality")
+        case "gemini-2.5-flash":
+            return ("Flash", .cyan, "15 RPM · 500 RPD · 1M TPM — great balance (default)")
+        case "gemini-2.5-flash-lite":
+            return ("Lite", .green, "30 RPM · 1,500 RPD · 1M TPM — cheapest 2.5")
+        case "gemini-2.0-flash":
+            return ("Flash", .cyan, "15 RPM · 1,500 RPD · 1M TPM — reliable previous gen")
+        case "gemini-2.0-flash-lite":
+            return ("Lite", .green, "30 RPM · 1,500 RPD · 1M TPM — lightest & fastest")
+        default:
+            return ("Free", .green, "Rate-limited free tier")
         }
     }
 }
@@ -249,7 +421,7 @@ private struct CloudProviderSheet: View {
 // MARK: - Settings View
 
 struct SettingsView: View {
-    @StateObject private var analysisService = FoodAnalysisService.shared
+    @ObservedObject private var analysisService = FoodAnalysisService.shared
     @State private var settings: SettingsResponse?
     @State private var isLoading = true
     @State private var isSaving = false
@@ -261,7 +433,7 @@ struct SettingsView: View {
     @State private var proteinGoal: String = ""
     @State private var carbsGoal: String = ""
     @State private var fatGoal: String = ""
-    @State private var modelProvider: String = "lmstudio"
+    @State private var modelProvider: String = "google"
     @State private var lmstudioBaseUrl: String = ""
     @State private var lmstudioVisionModel: String = ""
     @State private var lmstudioPortionModel: String = ""
@@ -281,8 +453,9 @@ struct SettingsView: View {
     @State private var selectedTimezone: String = AppTimeZone.current.identifier
 
     // Multi-provider
-    @State private var selectedLLMProvider: String = "lmstudio"
+    @State private var selectedLLMProvider: String = "google"
     @State private var showProviderSheet: ProviderSheet? = nil
+    @State private var logCount: Int = 0
 
     private var initials: String {
         guard let name = currentUser?.name else { return "?" }
@@ -350,9 +523,6 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Theme.cardSurface)
 
-                // Analysis Provider Section
-                analysisProviderSection
-
                 // Nutrition Goals Section
                 Section {
                     HStack {
@@ -412,7 +582,7 @@ struct SettingsView: View {
                 }
                 .listRowBackground(Theme.cardSurface)
 
-                // Multi-Provider AI Configuration
+                // AI Provider (used for both image analysis and meal planning)
                 Section {
                     providerCard(
                         icon: "desktopcomputer",
@@ -423,6 +593,7 @@ struct SettingsView: View {
                     ) {
                         selectedLLMProvider = "lmstudio"
                         modelProvider = "lmstudio"
+                        analysisService.currentProvider = .backend
                     }
 
                     if selectedLLMProvider == "lmstudio" {
@@ -472,6 +643,7 @@ struct SettingsView: View {
                     ) {
                         selectedLLMProvider = "openai"
                         modelProvider = "openai"
+                        analysisService.currentProvider = .openai
                         showProviderSheet = ProviderSheet(id: "openai")
                     }
 
@@ -479,11 +651,12 @@ struct SettingsView: View {
                         icon: "sparkles",
                         iconGradient: [Color(red: 59/255, green: 130/255, blue: 246/255), Color(red: 37/255, green: 99/255, blue: 235/255)],
                         title: "Google AI",
-                        subtitle: "Gemini 1.5 Pro / Flash",
+                        subtitle: "Gemini 2.5 / 3.x (free)",
                         isActive: selectedLLMProvider == "google"
                     ) {
                         selectedLLMProvider = "google"
                         modelProvider = "google"
+                        analysisService.currentProvider = .gemini
                         showProviderSheet = ProviderSheet(id: "google")
                     }
 
@@ -491,11 +664,12 @@ struct SettingsView: View {
                         icon: "arrow.triangle.branch",
                         iconGradient: [Color(red: 139/255, green: 92/255, blue: 246/255), Color(red: 168/255, green: 85/255, blue: 247/255)],
                         title: "OpenRouter",
-                        subtitle: "Qwen3-VL, Llama, GPT, Gemini",
+                        subtitle: "Free models \u{00b7} Gemma, Nemotron, Qwen",
                         isActive: selectedLLMProvider == "openrouter"
                     ) {
                         selectedLLMProvider = "openrouter"
                         modelProvider = "openrouter"
+                        analysisService.currentProvider = .openrouter
                         showProviderSheet = ProviderSheet(id: "openrouter")
                     }
 
@@ -520,6 +694,9 @@ struct SettingsView: View {
                     .listRowBackground(Theme.cardSurface)
                 } header: {
                     Text("AI Provider")
+                        .foregroundStyle(Theme.textMuted)
+                } footer: {
+                    Text("Used for food photo analysis, meal planning, and AI food lookup")
                         .foregroundStyle(Theme.textMuted)
                 }
 
@@ -603,6 +780,28 @@ struct SettingsView: View {
                     .listRowBackground(Color.clear)
                 }
 
+                // Diagnostics
+                Section {
+                    NavigationLink {
+                        NetworkLogsView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "doc.text.magnifyingglass")
+                                .foregroundStyle(Theme.accent)
+                            Text("Network Logs")
+                                .foregroundStyle(Theme.textPrimary)
+                            Spacer()
+                            Text("\(logCount) entries")
+                                .font(.caption)
+                                .foregroundStyle(Theme.textMuted)
+                        }
+                    }
+                } header: {
+                    Text("Diagnostics")
+                        .foregroundStyle(Theme.textMuted)
+                }
+                .listRowBackground(Theme.cardSurface)
+
                 // App Info
                 Section {
                     HStack {
@@ -628,6 +827,7 @@ struct SettingsView: View {
             .task {
                 await loadSettings()
                 await loadCurrentUser()
+                logCount = NetworkLogger.shared.entryCount()
             }
             .alert("Error", isPresented: Binding(
                 get: { errorMessage != nil },
@@ -676,45 +876,6 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Analysis Provider Section
-
-    private var analysisProviderSection: some View {
-        Section {
-            ForEach(analysisService.availableProviders, id: \.self) { (provider: AnalysisProviderType) in
-                Button {
-                    analysisService.currentProvider = provider
-                } label: {
-                    HStack {
-                        Image(systemName: provider.systemImage)
-                            .frame(width: 24)
-                            .foregroundStyle(Theme.accent)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(provider.rawValue)
-                                .foregroundStyle(Theme.textPrimary)
-                            Text(provider.description)
-                                .font(.caption)
-                                .foregroundStyle(Theme.textSecondary)
-                        }
-                        Spacer()
-                        if analysisService.currentProvider == provider {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(Theme.accent)
-                        }
-                    }
-                }
-            }
-        } header: {
-            Text("Image Analysis")
-                .foregroundStyle(Theme.textMuted)
-        } footer: {
-            if analysisService.availableProviders.count == 1 {
-                Text("Apple Foundation Models requires iOS 26+ and is only available in the AppleAI build configuration.")
-                    .foregroundStyle(Theme.textMuted)
-            }
-        }
-        .listRowBackground(Theme.cardSurface)
-    }
-
     // MARK: - Provider Card
 
     @ViewBuilder
@@ -747,6 +908,14 @@ struct SettingsView: View {
 
     private func loadSettings() async {
         isLoading = true
+
+        // In cloud mode, load from local storage — no backend needed
+        if FoodAnalysisService.shared.isCloudMode {
+            loadLocalSettings()
+            isLoading = false
+            return
+        }
+
         do {
             let response = try await APIClient.shared.getSettings()
             settings = response
@@ -756,19 +925,39 @@ struct SettingsView: View {
             proteinGoal = String(response.proteinG)
             carbsGoal = String(response.carbsG)
             fatGoal = String(response.fatG)
-            modelProvider = response.modelProvider ?? "lmstudio"
+            modelProvider = response.modelProvider ?? "google"
             selectedLLMProvider = modelProvider
+            analysisService.syncFromSettings(modelProvider)
             lmstudioBaseUrl = response.lmstudioBaseUrl ?? "http://localhost:1234"
             lmstudioVisionModel = response.lmstudioVisionModel ?? ""
             lmstudioPortionModel = response.lmstudioPortionModel ?? ""
             portionStyle = response.portionEstimationStyle ?? "quick"
+        } catch is CancellationError {
+            // Normal SwiftUI task lifecycle — ignore silently
         } catch {
-            errorMessage = error.localizedDescription
+            // Backend unreachable — fall back to local settings
+            loadLocalSettings()
         }
         isLoading = false
     }
 
+    private func loadLocalSettings() {
+        let ud = UserDefaults.standard
+        let cal = ud.integer(forKey: "local_calorie_goal")
+        let pro = ud.integer(forKey: "local_protein_goal")
+        let carb = ud.integer(forKey: "local_carbs_goal")
+        let fat = ud.integer(forKey: "local_fat_goal")
+        calorieGoal = String(cal > 0 ? cal : 2200)
+        proteinGoal = String(pro > 0 ? pro : 150)
+        carbsGoal = String(carb > 0 ? carb : 200)
+        fatGoal = String(fat > 0 ? fat : 65)
+    }
+
     private func loadCurrentUser() async {
+        guard !FoodAnalysisService.shared.isCloudMode else {
+            currentUser = nil
+            return
+        }
         do {
             let user = try await APIClient.shared.me()
             currentUser = user
@@ -800,6 +989,16 @@ struct SettingsView: View {
         UserDefaults.standard.set(Int(fatGoal) ?? 65, forKey: "local_fat_goal")
 
         FoodAnalysisService.shared.syncFromSettings(modelProvider)
+
+        // In cloud mode, just save locally and show success
+        if FoodAnalysisService.shared.isCloudMode {
+            isSaving = false
+            withAnimation { showSuccessToast = true }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                withAnimation { showSuccessToast = false }
+            }
+            return
+        }
 
         Task {
             do {

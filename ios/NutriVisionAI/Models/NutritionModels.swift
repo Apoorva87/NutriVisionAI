@@ -541,3 +541,35 @@ struct MealSuggestion: Codable, Identifiable {
         case fatG = "fat_g"
     }
 }
+
+// MARK: - Network Log Entry
+
+struct NetworkLogEntry: Identifiable {
+    let id: Int
+    let timestamp: String
+    let provider: String       // "gemini", "openai", "openrouter", "backend"
+    let action: String         // "analyze_image", "text_chat", or API path
+    let durationMs: Int
+    let status: String         // "ok" or "error"
+    let errorMessage: String?
+    let responseSizeBytes: Int?
+}
+
+// MARK: - Grocery
+
+struct GroceryAISuggestion: Codable, Identifiable {
+    var id: String { item }
+    let item: String
+    let quantity: String
+    let hints: String
+}
+
+struct GroceryCartItem: Identifiable {
+    let id: Int
+    let name: String
+    let quantity: String
+    let hints: String
+    let isCustom: Bool
+    let addedAt: String
+    var isChecked: Bool
+}
