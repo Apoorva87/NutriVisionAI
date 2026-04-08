@@ -15,6 +15,11 @@ struct AnalyzeView: View {
     @State private var showSuccessAlert = false
     @State private var showProviderPicker = false
     @State private var showQuickSearch = false
+    @State private var showBarcodeScanner = false
+    @State private var scannedBarcode: String?
+    @State private var barcodeProduct: OpenFoodFactsProduct?
+    @State private var showBarcodeResult = false
+    @State private var isBarcodeLoading = false
     
     private var totalCalories: Double {
         editableItems.filter { $0.isIncluded }.reduce(0) { $0 + $1.effectiveCalories }
@@ -40,6 +45,7 @@ struct AnalyzeView: View {
                     ImageCaptureView(
                         showCamera: $showCamera,
                         selectedPhoto: $selectedPhoto,
+                        showBarcodeScanner: $showBarcodeScanner,
                         onImageSelected: analyzeImage
                     )
                 } else if isAnalyzing {
@@ -107,6 +113,39 @@ struct AnalyzeView: View {
             .sheet(isPresented: $showQuickSearch) {
                 QuickFoodSearchSheet { newItem in
                     editableItems.append(newItem)
+                }
+            }
+            .fullScreenCover(isPresented: $showBarcodeScanner) {
+                BarcodeScannerView(scannedBarcode: $scannedBarcode)
+            }
+            .onChange(of: scannedBarcode) { _, newBarcode in
+                guard let barcode = newBarcode else { return }
+                scannedBarcode = nil
+                Task { await lookupBarcode(barcode) }
+            }
+            .sheet(isPresented: $showBarcodeResult) {
+                if let product = barcodeProduct {
+                    BarcodeResultSheet(product: product) { newItem in
+                        addBarcodeItem(newItem)
+                    }
+                }
+            }
+            .overlay {
+                if isBarcodeLoading {
+                    ZStack {
+                        Color.black.opacity(0.4).ignoresSafeArea()
+                        VStack(spacing: 12) {
+                            ProgressView()
+                                .scaleEffect(1.2)
+                                .tint(.white)
+                            Text("Looking up product…")
+                                .font(.subheadline)
+                                .foregroundStyle(.white)
+                        }
+                        .padding(24)
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                    }
                 }
             }
         }
@@ -205,6 +244,61 @@ struct AnalyzeView: View {
         }
     }
     
+    private func lookupBarcode(_ barcode: String) async {
+        isBarcodeLoading = true
+        defer { isBarcodeLoading = false }
+
+        // Check local cache first
+        if let cached = LocalMealStore.shared.lookupByBarcode(barcode) {
+            barcodeProduct = OpenFoodFactsProduct(
+                productName: cached.foodName,
+                brands: "",
+                barcode: barcode,
+                caloriesPer100g: cached.calories / cached.servingGrams * 100,
+                proteinPer100g: cached.proteinG / cached.servingGrams * 100,
+                carbsPer100g: cached.carbsG / cached.servingGrams * 100,
+                fatPer100g: cached.fatG / cached.servingGrams * 100,
+                servingSizeString: "\(Int(cached.servingGrams))g"
+            )
+            showBarcodeResult = true
+            return
+        }
+
+        do {
+            if let product = try await OpenFoodFactsService.shared.lookupBarcode(barcode) {
+                barcodeProduct = product
+                showBarcodeResult = true
+            } else {
+                errorMessage = "Product not found in Open Food Facts database. Try scanning a different barcode or use AI analysis."
+            }
+        } catch {
+            errorMessage = "Barcode lookup failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func addBarcodeItem(_ newItem: EditableAnalysisItem) {
+        editableItems.append(newItem)
+
+        // If we don't have an analysis result yet, create a synthetic one
+        if analysisResult == nil {
+            let totals = NutritionTotals(
+                calories: newItem.effectiveCalories,
+                proteinG: newItem.effectiveProtein,
+                carbsG: newItem.effectiveCarbs,
+                fatG: newItem.effectiveFat
+            )
+            analysisResult = AnalysisResponse(
+                imagePath: nil,
+                items: [newItem.item],
+                totals: totals,
+                providerMetadata: ["source": "barcode"]
+            )
+            let timeFormatter = DateFormatter()
+            timeFormatter.timeStyle = .short
+            mealName = "Meal at \(timeFormatter.string(from: Date()))"
+        }
+    }
+
     private func reset() {
         capturedImage = nil
         selectedPhoto = nil
@@ -241,12 +335,13 @@ struct EditableAnalysisItem: Identifiable {
 struct ImageCaptureView: View {
     @Binding var showCamera: Bool
     @Binding var selectedPhoto: PhotosPickerItem?
+    @Binding var showBarcodeScanner: Bool
     let onImageSelected: (Data) -> Void
-    
+
     var body: some View {
         VStack(spacing: 32) {
             Spacer()
-            
+
             Image(systemName: "camera.viewfinder")
                 .font(.system(size: 80))
                 .foregroundStyle(Theme.textSecondary)
@@ -257,14 +352,14 @@ struct ImageCaptureView: View {
                 .fontWeight(.semibold)
                 .foregroundStyle(Theme.textPrimary)
 
-            Text("Take a photo or choose from your library to analyze the nutritional content")
+            Text("Take a photo, choose from your library, or scan a barcode to analyze nutritional content")
                 .font(.body)
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
-            
+
             Spacer()
-            
+
             VStack(spacing: 16) {
                 GradientButton(title: "Take Photo", icon: "camera.fill") { showCamera = true }
 
@@ -283,6 +378,19 @@ struct ImageCaptureView: View {
                         if let data = try? await newValue?.loadTransferable(type: Data.self) {
                             onImageSelected(data)
                         }
+                    }
+                }
+
+                if BarcodeScannerView.isAvailable {
+                    Button { showBarcodeScanner = true } label: {
+                        Label("Scan Barcode", systemImage: "barcode.viewfinder")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Theme.cardSurface)
+                            .foregroundStyle(Theme.textPrimary)
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.cardBorder))
                     }
                 }
             }

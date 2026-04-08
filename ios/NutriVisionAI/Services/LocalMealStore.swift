@@ -67,6 +67,26 @@ final class LocalMealStore {
         """
         sqlite3_exec(db, sql, nil, nil, nil)
         sqlite3_exec(db, "PRAGMA foreign_keys = ON;", nil, nil, nil)
+        migrateAddBarcodeColumn()
+    }
+
+    /// Add barcode column to custom_foods if it doesn't exist yet.
+    private func migrateAddBarcodeColumn() {
+        guard let db = db else { return }
+        var stmt: OpaquePointer?
+        var hasBarcode = false
+        if sqlite3_prepare_v2(db, "PRAGMA table_info(custom_foods);", -1, &stmt, nil) == SQLITE_OK {
+            while sqlite3_step(stmt) == SQLITE_ROW {
+                if let name = sqlite3_column_text(stmt, 1), String(cString: name) == "barcode" {
+                    hasBarcode = true
+                    break
+                }
+            }
+            sqlite3_finalize(stmt)
+        }
+        if !hasBarcode {
+            sqlite3_exec(db, "ALTER TABLE custom_foods ADD COLUMN barcode TEXT;", nil, nil, nil)
+        }
     }
 
     // MARK: - Save
@@ -327,12 +347,13 @@ final class LocalMealStore {
 
     @discardableResult
     func saveCustomFood(name: String, servingGrams: Double, calories: Double,
-                        proteinG: Double, carbsG: Double, fatG: Double) -> Int {
+                        proteinG: Double, carbsG: Double, fatG: Double,
+                        barcode: String? = nil) -> Int {
         guard let db = db else { return -1 }
         var foodId = -1
         queue.sync {
             let now = ISO8601DateFormatter().string(from: Date())
-            let sql = "INSERT OR REPLACE INTO custom_foods (food_name, serving_grams, calories, protein_g, carbs_g, fat_g, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            let sql = "INSERT OR REPLACE INTO custom_foods (food_name, serving_grams, calories, protein_g, carbs_g, fat_g, created_at, barcode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
@@ -344,6 +365,11 @@ final class LocalMealStore {
             sqlite3_bind_double(stmt, 5, carbsG)
             sqlite3_bind_double(stmt, 6, fatG)
             sqlite3_bind_text(stmt, 7, (now as NSString).utf8String, -1, transient)
+            if let bc = barcode {
+                sqlite3_bind_text(stmt, 8, (bc as NSString).utf8String, -1, transient)
+            } else {
+                sqlite3_bind_null(stmt, 8)
+            }
             if sqlite3_step(stmt) == SQLITE_DONE {
                 foodId = Int(sqlite3_last_insert_rowid(db))
             }
@@ -351,11 +377,36 @@ final class LocalMealStore {
         return foodId
     }
 
+    func lookupByBarcode(_ barcode: String) -> CustomFood? {
+        guard let db = db else { return nil }
+        var result: CustomFood?
+        queue.sync {
+            let sql = "SELECT id, food_name, serving_grams, calories, protein_g, carbs_g, fat_g, barcode FROM custom_foods WHERE barcode = ? LIMIT 1"
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_text(stmt, 1, (barcode as NSString).utf8String, -1, nil)
+            if sqlite3_step(stmt) == SQLITE_ROW {
+                result = CustomFood(
+                    id: Int(sqlite3_column_int(stmt, 0)),
+                    foodName: String(cString: sqlite3_column_text(stmt, 1)),
+                    servingGrams: sqlite3_column_double(stmt, 2),
+                    calories: sqlite3_column_double(stmt, 3),
+                    proteinG: sqlite3_column_double(stmt, 4),
+                    carbsG: sqlite3_column_double(stmt, 5),
+                    fatG: sqlite3_column_double(stmt, 6),
+                    barcode: sqlite3_column_text(stmt, 7).map { String(cString: $0) }
+                )
+            }
+        }
+        return result
+    }
+
     func allCustomFoods() -> [CustomFood] {
         guard let db = db else { return [] }
         var foods: [CustomFood] = []
         queue.sync {
-            let sql = "SELECT id, food_name, serving_grams, calories, protein_g, carbs_g, fat_g FROM custom_foods ORDER BY food_name"
+            let sql = "SELECT id, food_name, serving_grams, calories, protein_g, carbs_g, fat_g, barcode FROM custom_foods ORDER BY food_name"
             var stmt: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
@@ -367,7 +418,8 @@ final class LocalMealStore {
                     calories: sqlite3_column_double(stmt, 3),
                     proteinG: sqlite3_column_double(stmt, 4),
                     carbsG: sqlite3_column_double(stmt, 5),
-                    fatG: sqlite3_column_double(stmt, 6)
+                    fatG: sqlite3_column_double(stmt, 6),
+                    barcode: sqlite3_column_text(stmt, 7).map { String(cString: $0) }
                 ))
             }
         }

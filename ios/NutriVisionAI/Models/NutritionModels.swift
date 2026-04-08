@@ -360,6 +360,7 @@ struct CustomFood: Codable, Identifiable {
     let proteinG: Double
     let carbsG: Double
     let fatG: Double
+    let barcode: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -369,6 +370,7 @@ struct CustomFood: Codable, Identifiable {
         case proteinG = "protein_g"
         case carbsG = "carbs_g"
         case fatG = "fat_g"
+        case barcode
     }
 }
 
