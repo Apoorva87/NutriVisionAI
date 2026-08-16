@@ -2,6 +2,23 @@ import XCTest
 @testable import NutriVisionAI
 
 final class IBuyGroceryClientTests: XCTestCase {
+    private var originalBaseURL = ""
+    private var originalAPIToken: String?
+
+    override func setUp() {
+        super.setUp()
+        let client = IBuyGroceryClient.shared
+        originalBaseURL = client.baseURL
+        originalAPIToken = client.apiToken
+    }
+
+    override func tearDown() {
+        let client = IBuyGroceryClient.shared
+        client.baseURL = originalBaseURL
+        client.setAPIToken(originalAPIToken)
+        super.tearDown()
+    }
+
     func testRemoteRequestUsesAPIV1AndAPIKeyHeader() throws {
         let client = IBuyGroceryClient.shared
         client.baseURL = "https://grocery.example.com/"
