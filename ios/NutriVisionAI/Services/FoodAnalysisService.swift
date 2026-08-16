@@ -101,6 +101,28 @@ final class FoodAnalysisService: ObservableObject {
         }
     }
 
+    /// Whether the currently selected provider has what it needs to make requests
+    /// (API key for cloud providers, always-true for backend and Apple Foundation).
+    /// Used by views to decide whether to auto-fire LLM calls or show an onboarding prompt.
+    var isActiveProviderConfigured: Bool {
+        switch currentProvider {
+        case .backend:
+            return true
+        case .openai:
+            return !(KeychainHelper.read(key: "openai_api_key") ?? "").isEmpty
+        case .gemini:
+            return !(KeychainHelper.read(key: "google_api_key") ?? "").isEmpty
+        case .openrouter:
+            return !(KeychainHelper.read(key: "openrouter_api_key") ?? "").isEmpty
+        case .appleFoundation:
+            #if APPLE_FOUNDATION_MODELS
+            return appleProvider.isAvailable
+            #else
+            return false
+            #endif
+        }
+    }
+
     var availableProviders: [AnalysisProviderType] {
         var providers: [AnalysisProviderType] = [.backend, .openai, .gemini, .openrouter]
 

@@ -780,6 +780,48 @@ struct SettingsView: View {
                     .listRowBackground(Color.clear)
                 }
 
+                // Store Prices (iBuyGrocery) integration
+                Section {
+                    NavigationLink {
+                        IBuyGrocerySettingsView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "cart.fill")
+                                .foregroundStyle(Theme.accent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Store Prices")
+                                    .foregroundStyle(Theme.textPrimary)
+                                HStack(spacing: 6) {
+                                    Text(IBuyGroceryClient.shared.baseURL)
+                                        .font(.caption2)
+                                        .foregroundStyle(Theme.textMuted)
+                                        .lineLimit(1)
+                                    if IBuyGroceryClient.shared.isRemote {
+                                        Text(IBuyGroceryClient.shared.apiToken == nil ? "no key" : "authenticated")
+                                            .font(.caption2)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 1)
+                                            .background((IBuyGroceryClient.shared.apiToken == nil ? Color.orange : Color.green).opacity(0.15))
+                                            .foregroundStyle(IBuyGroceryClient.shared.apiToken == nil ? Color.orange : Color.green)
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(Theme.textMuted)
+                        }
+                    }
+                } header: {
+                    Text("Grocery Integrations")
+                        .foregroundStyle(Theme.textMuted)
+                } footer: {
+                    Text("Connect to an iBuyGrocery backend — locally for dev, or your hosted VPS — to fetch live prices from Target, Walmart, Safeway, Sprouts, Amazon Whole Foods, and more.")
+                        .foregroundStyle(Theme.textMuted)
+                }
+                .listRowBackground(Theme.cardSurface)
+
                 // Diagnostics
                 Section {
                     NavigationLink {

@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct QuickFoodSearchSheet: View {
-    let onAddItem: (EditableAnalysisItem) -> Void
+    let onAddItem: (MealDraftItem) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var query = ""
     @State private var results: [FoodItem] = []
@@ -117,22 +117,7 @@ struct QuickFoodSearchSheet: View {
     }
 
     private func addFood(_ food: FoodItem) {
-        let item = AnalysisItem(
-            detectedName: food.canonicalName,
-            canonicalName: food.canonicalName,
-            portionLabel: "1 serving",
-            estimatedGrams: food.servingGrams,
-            uncertainty: "low",
-            confidence: 1.0,
-            calories: food.calories,
-            proteinG: food.proteinG,
-            carbsG: food.carbsG,
-            fatG: food.fatG,
-            visionConfidence: 0.0,
-            dbMatch: true,
-            nutritionAvailable: true
-        )
-        onAddItem(EditableAnalysisItem(item: item))
+        onAddItem(MealDraftItem.from(foodItem: food))
         dismiss()
     }
 }

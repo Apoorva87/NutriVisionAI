@@ -1,7 +1,11 @@
 import SwiftUI
 
 struct ContentView: View {
-    @State private var selectedTab = 0
+    @State private var selectedTab: Int
+
+    init() {
+        _selectedTab = State(initialValue: Self.initialTabSelection())
+    }
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -11,15 +15,15 @@ struct ContentView: View {
                 }
                 .tag(0)
 
-            AnalyzeView()
+            UnifiedLogView()
                 .tabItem {
-                    Label("Scan", systemImage: "camera.fill")
+                    Label("Log", systemImage: "plus.circle.fill")
                 }
                 .tag(1)
 
-            LogView()
+            GroceryListView()
                 .tabItem {
-                    Label("Log", systemImage: "plus.circle.fill")
+                    Label("Grocery", systemImage: "cart.fill")
                 }
                 .tag(2)
 
@@ -47,6 +51,12 @@ struct ContentView: View {
         appearance.stackedLayoutAppearance.normal.titleTextAttributes = [.foregroundColor: UIColor(Theme.textMuted)]
         UITabBar.appearance().standardAppearance = appearance
         UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
+
+    private static func initialTabSelection() -> Int {
+        let env = ProcessInfo.processInfo.environment["NUTRIVISION_INITIAL_TAB"]
+        guard let env, let tab = Int(env), (0...4).contains(tab) else { return 0 }
+        return tab
     }
 }
 

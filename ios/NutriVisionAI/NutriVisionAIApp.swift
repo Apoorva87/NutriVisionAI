@@ -9,7 +9,10 @@ struct NutriVisionAIApp: App {
 
     /// Re-save existing API keys with correct accessibility so they survive app restarts.
     private static func migrateKeychainAccessibility() {
-        let keys = ["openai_api_key", "google_api_key", "openrouter_api_key", "anthropic_api_key"]
+        let keys = [
+            "openai_api_key", "google_api_key", "openrouter_api_key", "anthropic_api_key",
+            "ibg_api_token",
+        ]
         for key in keys {
             if let value = KeychainHelper.read(key: key) {
                 try? KeychainHelper.save(key: key, value: value)

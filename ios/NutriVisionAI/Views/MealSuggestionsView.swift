@@ -102,16 +102,47 @@ struct MealSuggestionsView: View {
                 ForEach(remainingSlots, id: \.name) { slot in
                     ShimmerCard()
                 }
+            } else if !FoodAnalysisService.shared.isActiveProviderConfigured {
+                VStack(spacing: 8) {
+                    Image(systemName: "key.fill")
+                        .font(.title2)
+                        .foregroundStyle(Theme.textMuted)
+                    Text("Set up AI meal suggestions")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundStyle(Theme.textPrimary)
+                    Text("Add an API key in Settings to get personalized meal ideas.")
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Theme.textSecondary)
+                    NavigationLink("Open Settings") {
+                        SettingsView()
+                    }
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Theme.accent)
+                    .padding(.top, 4)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
             } else if let error = errorMessage {
                 VStack(spacing: 8) {
                     Text(error)
                         .font(.caption)
+                        .multilineTextAlignment(.center)
                         .foregroundStyle(Theme.destructive)
-                    NavigationLink("Configure AI in Settings") {
-                        SettingsView()
+                    HStack(spacing: 12) {
+                        Button("Retry") {
+                            Task { await loadSuggestions() }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(Theme.accent)
+                        NavigationLink("Open Settings") {
+                            SettingsView()
+                        }
+                        .font(.caption)
+                        .foregroundStyle(Theme.accent)
                     }
-                    .font(.caption)
-                    .foregroundStyle(Theme.accent)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
@@ -133,7 +164,12 @@ struct MealSuggestionsView: View {
         .task {
             calorieBudget = Int(summary.remainingCalories)
             // Only auto-load on first appear (app launch); skip if already populated
-            if suggestions.isEmpty && calorieBudget >= 50 && !remainingSlots.isEmpty {
+            // or if the selected provider isn't configured yet (avoids a confusing HTTP
+            // error on a fresh install before the user has entered an API key).
+            if suggestions.isEmpty
+                && calorieBudget >= 50
+                && !remainingSlots.isEmpty
+                && FoodAnalysisService.shared.isActiveProviderConfigured {
                 await loadSuggestions()
             }
         }

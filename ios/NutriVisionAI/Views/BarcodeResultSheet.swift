@@ -4,7 +4,7 @@ import SwiftUI
 
 struct BarcodeResultSheet: View {
     let product: OpenFoodFactsProduct
-    let onAddToMeal: (EditableAnalysisItem) -> Void
+    let onAddToMeal: (MealDraftItem) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var servingGrams: Double = 100.0
@@ -225,36 +225,24 @@ struct BarcodeResultSheet: View {
     }
 
     private func addToMeal() {
-        let item = AnalysisItem(
-            detectedName: product.productName,
-            canonicalName: product.productName.lowercased(),
-            portionLabel: "\(Int(servingGrams))g serving",
-            estimatedGrams: servingGrams,
-            uncertainty: "low",
-            confidence: 1.0,
-            calories: calories,
-            proteinG: protein,
-            carbsG: carbs,
-            fatG: fat,
-            visionConfidence: 0.0,
-            dbMatch: true,
-            nutritionAvailable: true
-        )
-        onAddToMeal(EditableAnalysisItem(item: item))
+        let item = MealDraftItem.from(barcodeProduct: product, servingGrams: servingGrams)
+        onAddToMeal(item)
         dismiss()
     }
 
     private func saveAsCustomFood() {
-        LocalMealStore.shared.saveCustomFood(
-            name: product.productName,
-            servingGrams: servingGrams,
-            calories: calories,
-            proteinG: protein,
-            carbsG: carbs,
-            fatG: fat,
-            barcode: product.barcode
-        )
-        withAnimation { showSavedConfirmation = true }
+        Task {
+            await LocalMealStore.shared.saveCustomFood(
+                name: product.productName,
+                servingGrams: servingGrams,
+                calories: calories,
+                proteinG: protein,
+                carbsG: carbs,
+                fatG: fat,
+                barcode: product.barcode
+            )
+            withAnimation { showSavedConfirmation = true }
+        }
     }
 }
 

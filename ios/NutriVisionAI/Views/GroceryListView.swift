@@ -68,33 +68,35 @@ struct GroceryListView: View {
                 ForEach(0..<4, id: \.self) { _ in
                     ShimmerRect()
                 }
-            } else if let error = errorMessage {
-                VStack(spacing: 6) {
+            } else {
+                if let error = errorMessage {
                     Text(error)
                         .font(.caption)
                         .foregroundStyle(Theme.destructive)
                         .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-            } else if suggestions.isEmpty {
-                HStack {
-                    Spacer()
-                    VStack(spacing: 4) {
-                        Text("Tap refresh to generate a weekly grocery list")
-                            .font(.caption)
-                            .foregroundStyle(Theme.textSecondary)
+
+                if suggestions.isEmpty {
+                    HStack {
+                        Spacer()
+                        VStack(spacing: 4) {
+                            Text("Tap refresh to generate a weekly grocery list")
+                                .font(.caption)
+                                .foregroundStyle(Theme.textSecondary)
+                        }
+                        Spacer()
                     }
-                    Spacer()
-                }
-                .padding(.vertical, 16)
-            } else {
-                ForEach(suggestions) { item in
-                    SuggestionRow(
-                        item: item,
-                        isAdded: addedItemNames.contains(item.item.lowercased())
-                    ) {
-                        addToCart(item)
+                    .padding(.vertical, 16)
+                } else {
+                    ForEach(suggestions) { item in
+                        SuggestionRow(
+                            item: item,
+                            isAdded: addedItemNames.contains(item.item.lowercased())
+                        ) {
+                            addToCart(item)
+                        }
                     }
                 }
             }
@@ -189,10 +191,41 @@ struct GroceryListView: View {
                         reloadCart()
                     }
                 }
+
+                NavigationLink {
+                    GroceryStorePricesView(itemsToSeed: uncheckedCartLines())
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "cart.badge.plus")
+                        Text("Find Prices at Stores")
+                            .fontWeight(.semibold)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Theme.accentGradient)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .padding(.top, 4)
             }
         }
         .padding()
         .themedCard()
+    }
+
+    /// Convert unchecked cart items into raw-text lines suitable for iBuyGrocery's /items endpoint.
+    /// Falls back to all items if everything is checked.
+    private func uncheckedCartLines() -> [String] {
+        let unchecked = cartItems.filter { !$0.isChecked }
+        let source = unchecked.isEmpty ? cartItems : unchecked
+        return source.map { item in
+            let qty = item.quantity.trimmingCharacters(in: .whitespaces)
+            if qty.isEmpty { return item.name }
+            return "\(qty) \(item.name)"
+        }
     }
 
     // MARK: - Actions

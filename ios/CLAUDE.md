@@ -88,6 +88,23 @@ Option 2 — Manual:
 
 No external dependencies. Pure Foundation networking + SwiftUI.
 
+## Store Prices (iBuyGrocery) integration
+
+Regenerate the Xcode project after adding or removing Swift files:
+
+```bash
+cd ios/NutriVisionAI
+xcodegen generate
+```
+
+The Store Prices service is separate from NutriVisionAI's main backend. Its
+REST and SSE routes are rooted at `{storePricesBaseURL}/api/v1`, including
+`/healthz`, `/auth/me`, and `/events/list/{list_id}`. Hosted instances require
+the API key in the `X-API-Key` header (not a Bearer token); local development
+can omit it when the service permits the configured development user. The
+Settings screen uses `healthz()` for reachability and `authMe()` for identity,
+so a reachable service can still report an authentication recovery path.
+
 ## Connecting to the Backend
 
 The backend is a Python FastAPI server. During development:

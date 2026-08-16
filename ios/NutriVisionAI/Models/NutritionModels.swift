@@ -215,7 +215,12 @@ struct FoodSearchResponse: Codable {
 }
 
 struct FoodItem: Codable, Identifiable {
-    var id: String { canonicalName }
+    /// Stable unique ID — synthesized from name + serving + source to avoid List collisions
+    /// when multiple items share the same canonical name (e.g. different sources/serving sizes).
+    var id: String {
+        let source = sourceLabel ?? "unknown"
+        return "\(canonicalName)|\(servingGrams)|\(source)"
+    }
     let canonicalName: String
     let servingGrams: Double
     let calories: Double
@@ -261,7 +266,9 @@ struct LocalNutritionInfo {
 // MARK: - Analysis
 
 struct AnalysisItem: Codable, Identifiable {
-    var id: String { canonicalName }
+    /// Unique per-instance ID. Not encoded — generated fresh on decode/init.
+    let id: UUID
+
     let detectedName: String
     let canonicalName: String
     let portionLabel: String
@@ -280,6 +287,7 @@ struct AnalysisItem: Codable, Identifiable {
          estimatedGrams: Double, uncertainty: String, confidence: Double,
          calories: Double, proteinG: Double, carbsG: Double, fatG: Double,
          visionConfidence: Double, dbMatch: Bool, nutritionAvailable: Bool) {
+        self.id = UUID()
         self.detectedName = detectedName
         self.canonicalName = canonicalName
         self.portionLabel = portionLabel
@@ -295,6 +303,7 @@ struct AnalysisItem: Codable, Identifiable {
         self.nutritionAvailable = nutritionAvailable
     }
 
+    // id is excluded from CodingKeys — generated fresh on decode via init(from:)
     enum CodingKeys: String, CodingKey {
         case detectedName = "detected_name"
         case canonicalName = "canonical_name"
@@ -307,6 +316,41 @@ struct AnalysisItem: Codable, Identifiable {
         case visionConfidence = "vision_confidence"
         case dbMatch = "db_match"
         case nutritionAvailable = "nutrition_available"
+    }
+
+    init(from decoder: Decoder) throws {
+        self.id = UUID()
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.detectedName = try container.decode(String.self, forKey: .detectedName)
+        self.canonicalName = try container.decode(String.self, forKey: .canonicalName)
+        self.portionLabel = try container.decode(String.self, forKey: .portionLabel)
+        self.estimatedGrams = try container.decode(Double.self, forKey: .estimatedGrams)
+        self.uncertainty = try container.decode(String.self, forKey: .uncertainty)
+        self.confidence = try container.decode(Double.self, forKey: .confidence)
+        self.calories = try container.decode(Double.self, forKey: .calories)
+        self.proteinG = try container.decode(Double.self, forKey: .proteinG)
+        self.carbsG = try container.decode(Double.self, forKey: .carbsG)
+        self.fatG = try container.decode(Double.self, forKey: .fatG)
+        self.visionConfidence = try container.decode(Double.self, forKey: .visionConfidence)
+        self.dbMatch = try container.decode(Bool.self, forKey: .dbMatch)
+        self.nutritionAvailable = try container.decode(Bool.self, forKey: .nutritionAvailable)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(detectedName, forKey: .detectedName)
+        try container.encode(canonicalName, forKey: .canonicalName)
+        try container.encode(portionLabel, forKey: .portionLabel)
+        try container.encode(estimatedGrams, forKey: .estimatedGrams)
+        try container.encode(uncertainty, forKey: .uncertainty)
+        try container.encode(confidence, forKey: .confidence)
+        try container.encode(calories, forKey: .calories)
+        try container.encode(proteinG, forKey: .proteinG)
+        try container.encode(carbsG, forKey: .carbsG)
+        try container.encode(fatG, forKey: .fatG)
+        try container.encode(visionConfidence, forKey: .visionConfidence)
+        try container.encode(dbMatch, forKey: .dbMatch)
+        try container.encode(nutritionAvailable, forKey: .nutritionAvailable)
     }
 }
 
