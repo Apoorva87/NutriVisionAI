@@ -27,4 +27,23 @@ final class MealDraftStoreTests: XCTestCase {
         XCTAssertEqual(store.includedItems.map(\.provenance), [.scan, .search, .ai])
         XCTAssertEqual(store.totalCalories, 600)
     }
+
+    @MainActor
+    func testBackendMealRequestRetainsAnalysisImagePath() {
+        let store = MealDraftStore.shared
+        store.clear()
+        defer { store.clear() }
+        store.mealName = "Lunch"
+        store.setBackendImagePath("/uploads/lunch.jpg")
+        store.addItem(MealDraftItem(
+            name: "Pasta", baseGrams: 100, caloriesPer100g: 150,
+            proteinPer100g: 5, carbsPer100g: 30, fatPer100g: 2, provenance: .scan
+        ))
+
+        let request = store.makeBackendCreateMealRequest(named: "Lunch")
+
+        XCTAssertEqual(request.mealName, "Lunch")
+        XCTAssertEqual(request.imagePath, "/uploads/lunch.jpg")
+        XCTAssertEqual(request.items.count, 1)
+    }
 }

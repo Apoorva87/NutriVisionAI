@@ -24,6 +24,10 @@ final class MealDraftStore: ObservableObject {
     /// for the entire draft lifecycle (a 12MP photo can be 30–50 MB uncompressed).
     @Published private(set) var capturedImageURL: URL?
 
+    /// Backend upload path returned by image analysis. This is distinct from the
+    /// cloud-mode local temp image, which remains in `capturedImageURL`.
+    @Published private(set) var backendImagePath: String?
+
     private static let tempImageDir: URL = {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("DraftImages")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -37,6 +41,10 @@ final class MealDraftStore: ObservableObject {
             try? data.write(to: url)
             capturedImageURL = url
         }
+    }
+
+    func setBackendImagePath(_ imagePath: String?) {
+        backendImagePath = imagePath
     }
 
     /// Load the image from disk on demand (for display in review sheet, etc.).
@@ -95,6 +103,7 @@ final class MealDraftStore: ObservableObject {
             try? FileManager.default.removeItem(at: url)
         }
         capturedImageURL = nil
+        backendImagePath = nil
     }
 
     // MARK: - Save
@@ -119,12 +128,7 @@ final class MealDraftStore: ObservableObject {
                 throw MealDraftError.saveFailed("Failed to save meal to local database")
             }
         } else {
-            let mealItems = included.map { $0.toMealItemInput() }
-            let request = CreateMealRequest(
-                mealName: name,
-                imagePath: nil,
-                items: mealItems
-            )
+            let request = makeBackendCreateMealRequest(named: name)
             _ = try await APIClient.shared.createMeal(request)
         }
 
@@ -132,6 +136,14 @@ final class MealDraftStore: ObservableObject {
     }
 
     // MARK: - Helpers
+
+    func makeBackendCreateMealRequest(named name: String) -> CreateMealRequest {
+        CreateMealRequest(
+            mealName: name,
+            imagePath: backendImagePath,
+            items: includedItems.map { $0.toMealItemInput() }
+        )
+    }
 
     private func defaultMealName() -> String {
         let formatter = DateFormatter()

@@ -155,8 +155,9 @@ struct GroceryStorePricesView: View {
     private func firstLoad() async {
         do {
             var current = try await IBuyGroceryClient.shared.getTodayList()
-            if !itemsToSeed.isEmpty {
-                let rawText = itemsToSeed.joined(separator: "\n")
+            let missingLines = Self.linesToSeed(itemsToSeed, absentFrom: current.items)
+            if !missingLines.isEmpty {
+                let rawText = missingLines.joined(separator: "\n")
                 current = try await IBuyGroceryClient.shared.addItems(listId: current.id, rawText: rawText)
             }
             list = current
@@ -204,6 +205,26 @@ struct GroceryStorePricesView: View {
             _ = current // silence unused warning
         }
         sse.connect(listId: listId)
+    }
+
+    /// Keeps first-load cart seeding idempotent against the persistent Today list.
+    /// Existing remote items are not modified; only absent local cart lines are sent.
+    static func linesToSeed(_ seedLines: [String], absentFrom existingItems: [IBGListItem]) -> [String] {
+        var knownLines = Set(existingItems.map { normalizedSeedLine($0.rawText) })
+
+        return seedLines.compactMap { line in
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = normalizedSeedLine(trimmed)
+            guard !normalized.isEmpty, knownLines.insert(normalized).inserted else { return nil }
+            return trimmed
+        }
+    }
+
+    private static func normalizedSeedLine(_ line: String) -> String {
+        line
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            .lowercased()
     }
 }
 

@@ -114,9 +114,10 @@ final class IBuyGrocerySSEClient: NSObject, ObservableObject, URLSessionDataDele
 
     // MARK: - SSE parser
 
-    private func ingest(_ data: Data) {
+    /// Accepts bytes from the stream and emits complete LF- or CRLF-terminated SSE frames.
+    func ingest(_ data: Data) {
         buffer.append(data)
-        while let range = buffer.range(of: Data([0x0a, 0x0a])) /* \n\n */ {
+        while let range = frameDelimiter(in: buffer) {
             let chunk = buffer.subdata(in: 0..<range.lowerBound)
             buffer.removeSubrange(0..<range.upperBound)
             if let text = String(data: chunk, encoding: .utf8) {
@@ -125,15 +126,32 @@ final class IBuyGrocerySSEClient: NSObject, ObservableObject, URLSessionDataDele
         }
     }
 
+    private func frameDelimiter(in data: Data) -> Range<Data.Index>? {
+        let lf = data.range(of: Data([0x0a, 0x0a]))  // \n\n
+        let crlf = data.range(of: Data([0x0d, 0x0a, 0x0d, 0x0a]))  // \r\n\r\n
+
+        switch (lf, crlf) {
+        case let (.some(lf), .some(crlf)):
+            return lf.lowerBound < crlf.lowerBound ? lf : crlf
+        case let (.some(lf), .none):
+            return lf
+        case let (.none, .some(crlf)):
+            return crlf
+        case (.none, .none):
+            return nil
+        }
+    }
+
     private func parseEvent(_ text: String) {
         var event = "message"
         var dataLines: [String] = []
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+        let normalizedText = text.replacingOccurrences(of: "\r\n", with: "\n")
+        for line in normalizedText.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = String(line)
             if trimmed.hasPrefix("event:") {
-                event = String(trimmed.dropFirst("event:".count)).trimmingCharacters(in: .whitespaces)
+                event = String(trimmed.dropFirst("event:".count)).trimmingCharacters(in: .whitespacesAndNewlines)
             } else if trimmed.hasPrefix("data:") {
-                dataLines.append(String(trimmed.dropFirst("data:".count)).trimmingCharacters(in: .whitespaces))
+                dataLines.append(String(trimmed.dropFirst("data:".count)).trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
         currentEvent = event

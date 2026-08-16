@@ -207,6 +207,10 @@ struct ScanFlowView: View {
         do {
             let result = try await analysisService.analyzeImage(image)
 
+            // Preserve the backend's uploaded-image path for local-server meal saves.
+            // Cloud mode continues to save the captured temp image below.
+            draftStore.setBackendImagePath(result.imagePath)
+
             // Auto-add all detected items to draft
             let draftItems = result.items.map { MealDraftItem.from(analysisItem: $0) }
             draftStore.addItems(draftItems)
