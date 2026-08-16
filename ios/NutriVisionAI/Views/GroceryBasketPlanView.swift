@@ -171,7 +171,11 @@ struct GroceryBasketPlanView: View {
             async let planTask = IBuyGroceryClient.shared.basket(listId: listId, mode: mode)
             async let storesTask = IBuyGroceryClient.shared.basketStores(listId: listId)
             plan = try await planTask
-            stores = (try? await storesTask) ?? []
+            do {
+                stores = try await storesTask
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

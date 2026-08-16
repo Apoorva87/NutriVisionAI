@@ -114,7 +114,7 @@ struct GroceryStorePricesView: View {
                             .foregroundStyle(Theme.textMuted)
                         Spacer()
                         Button {
-                            Task { try? await IBuyGroceryClient.shared.reResolveList(listId: list.id) }
+                            Task { await reResolveAll(listId: list.id) }
                         } label: {
                             Label("Re-resolve all", systemImage: "arrow.clockwise")
                                 .font(.caption2)
@@ -177,6 +177,15 @@ struct GroceryStorePricesView: View {
             if !sse.isConnected {
                 connectSSE(listId: current.id)
             }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func reResolveAll(listId: Int) async {
+        do {
+            try await IBuyGroceryClient.shared.reResolveList(listId: listId)
+            errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }

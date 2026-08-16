@@ -55,3 +55,11 @@ test and app build still need to be run on a host with an operational iPhone
   `CompileAssetCatalogVariant` because `CoreSimulatorService` has no available
   simulator runtimes. This is the pre-existing environment limitation noted
   above, not a Swift compilation error from these changes.
+
+## Review remediation — error propagation round 2
+
+- `GroceryBasketPlanView.reload()` now preserves the cached single-store plans
+  when `basketStores` fails and surfaces the failure in the existing inline
+  banner.
+- `GroceryStorePricesView` now catches a failed Re-resolve all request and
+  surfaces it through the cached-list error banner.
