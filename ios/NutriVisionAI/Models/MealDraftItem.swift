@@ -12,6 +12,9 @@ enum DraftItemProvenance: String {
     /// Compatibility name for items created by the food search flow.
     static var search: Self { .database }
 
+    /// Compatibility name for items created by the camera analysis flow.
+    static var scan: Self { .camera }
+
     var systemImage: String {
         switch self {
         case .camera:   return "camera.fill"
