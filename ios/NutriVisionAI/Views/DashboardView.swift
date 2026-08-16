@@ -18,10 +18,26 @@ struct DashboardView: View {
                     ContentUnavailableView {
                         Label("Unable to Load", systemImage: "exclamationmark.triangle")
                     } description: {
-                        Text(error)
+                        VStack(spacing: 4) {
+                            Text(error)
+                            Text("Backend mode is selected but the server at \(APIClient.shared.baseURL) isn't reachable.")
+                                .font(.footnote)
+                                .foregroundStyle(Theme.textMuted)
+                        }
                     } actions: {
-                        Button("Try Again") {
-                            Task { await loadDashboard() }
+                        VStack(spacing: 8) {
+                            Button("Use Offline Mode") {
+                                FoodAnalysisService.shared.currentProvider = .gemini
+                                Task { await loadDashboard() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            Button("Try Again") {
+                                Task { await loadDashboard() }
+                            }
+                            NavigationLink("Open Settings") {
+                                SettingsView()
+                            }
+                            .font(.footnote)
                         }
                     }
                 } else if let data = dashboardData {
@@ -35,9 +51,6 @@ struct DashboardView: View {
                             recentMeals: data.recentMeals,
                             settings: nil
                         )
-
-                        // Grocery List shortcut
-                        GroceryCard()
 
                         // Recent Meals
                         RecentMealsSection(
@@ -82,8 +95,8 @@ struct DashboardView: View {
         errorMessage = nil
 
         if FoodAnalysisService.shared.isCloudMode {
-            let summary = LocalMealStore.shared.todaySummary()
-            let meals = LocalMealStore.shared.recentMeals()
+            let summary = await LocalMealStore.shared.todaySummary()
+            let meals = await LocalMealStore.shared.recentMeals()
             dashboardData = DashboardResponse(
                 summary: summary,
                 recentMeals: meals,
@@ -106,8 +119,10 @@ struct DashboardView: View {
 
     private func deleteMeal(_ meal: MealRecord) {
         if FoodAnalysisService.shared.isCloudMode {
-            LocalMealStore.shared.deleteMeal(id: meal.id)
-            Task { await loadDashboard() }
+            Task {
+                await LocalMealStore.shared.deleteMeal(id: meal.id)
+                await loadDashboard()
+            }
         } else {
             Task {
                 do {
@@ -444,9 +459,11 @@ struct MealDetailSheet: View {
             .confirmationDialog("Delete Meal", isPresented: $showDeleteConfirmation) {
                 Button("Delete", role: .destructive) {
                     if FoodAnalysisService.shared.isCloudMode {
-                        LocalMealStore.shared.deleteMeal(id: meal.id)
-                        onDelete()
-                        dismiss()
+                        Task {
+                            await LocalMealStore.shared.deleteMeal(id: meal.id)
+                            onDelete()
+                            dismiss()
+                        }
                     } else {
                         Task {
                             try? await APIClient.shared.deleteMeal(id: meal.id)
@@ -483,55 +500,6 @@ struct NutritionStatView: View {
                 .foregroundStyle(Theme.textSecondary)
         }
         .frame(maxWidth: .infinity)
-    }
-}
-
-// MARK: - Grocery Card
-
-struct GroceryCard: View {
-    @State private var cartCount = 0
-
-    var body: some View {
-        NavigationLink(destination: GroceryListView()) {
-            HStack(spacing: 12) {
-                Image(systemName: "cart.fill")
-                    .font(.title3)
-                    .foregroundStyle(Theme.accent)
-                    .frame(width: 40, height: 40)
-                    .background(Theme.accent.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Grocery List")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Theme.textPrimary)
-                    Text("AI-powered weekly shopping")
-                        .font(.caption)
-                        .foregroundStyle(Theme.textSecondary)
-                }
-
-                Spacer()
-
-                if cartCount > 0 {
-                    Text("\(cartCount)")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(Theme.accent)
-                        .clipShape(Capsule())
-                }
-
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(Theme.textMuted)
-            }
-            .padding()
-            .themedCard()
-        }
-        .onAppear { cartCount = GroceryCartStore.shared.itemCount() }
     }
 }
 

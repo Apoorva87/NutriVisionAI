@@ -75,7 +75,7 @@ struct HistoryView: View {
         errorMessage = nil
 
         if FoodAnalysisService.shared.isCloudMode {
-            historyData = LocalMealStore.shared.history(days: selectedDays)
+            historyData = await LocalMealStore.shared.history(days: selectedDays)
             isLoading = false
         } else {
             do {
